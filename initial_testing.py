@@ -20,4 +20,4 @@ dt = time.time() - start_time
 FPS = N / (dt)
 print(f"Frames Per Second = {N} / {dt} = {FPS}")
 
-
+print("hello")
