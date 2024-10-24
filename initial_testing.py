@@ -21,11 +21,11 @@ import mani_skill.envs as maniskill
 import torch
 import time
 
-env_id = "StackCube-v1"
+env_id = "PickCube-v1"
 obs_mode = "rgb+depth+segmentation"
 control_mode = "pd_joint_delta_pos"
 reward_mode = "sparse"
-robot_uids = "Panda"
+robot_uids = "panda"
 
 
 
@@ -45,17 +45,19 @@ if IN_COLAB:
 
 def main():
     env = gym.make(env_id, num_envs=num_envs, obs_mode=obs_mode, control_mode=control_mode, 
-                   reward_mode=reward_mode, robot_uids=robot_uids, enable_shadows=True)
+                   reward_mode=reward_mode, robot_uids=robot_uids, enable_shadow=True)
     env.unwrapped.print_sim_details()
-    obs, _ = env.reset()
+    obs, info_reset = env.reset()
+    print("Observation Space:", obs)
+    print("Info:", info_reset)
     print("Action Space:", env.action_space)
     done = False
     start_time = time.time()
     total_rew = 0
-    while not done:
-        # note that env.action_space is now a batched action space
-        obs, rew, terminated, truncated, info = env.step(torch.from_numpy(env.action_space.sample()))
-        done = (terminated | truncated).any() # stop if any environment terminates/truncates
+    # while not done:
+    #     # note that env.action_space is now a batched action space
+    #     obs, rew, terminated, truncated, info = env.step(torch.from_numpy(env.action_space.sample()))
+    #     done = (terminated | truncated).any() # stop if any environment terminates/truncates
     N = num_envs * info["elapsed_steps"][0].item()
     dt = time.time() - start_time
     FPS = N / (dt)
