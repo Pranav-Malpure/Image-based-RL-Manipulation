@@ -54,6 +54,7 @@ def main():
     done = False
     start_time = time.time()
     total_rew = 0
+    obs, rew, terminated, truncated, info = env.step(torch.from_numpy(env.action_space.sample()))
     # while not done:
     #     # note that env.action_space is now a batched action space
     #     obs, rew, terminated, truncated, info = env.step(torch.from_numpy(env.action_space.sample()))
