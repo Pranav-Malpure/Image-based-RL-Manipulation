@@ -60,3 +60,7 @@ def main():
     dt = time.time() - start_time
     FPS = N / (dt)
     print(f"Frames Per Second = {N} / {dt} = {FPS}")
+
+
+if __name__ == "__main__":
+    main()
