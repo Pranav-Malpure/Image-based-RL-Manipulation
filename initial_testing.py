@@ -1,3 +1,17 @@
+import subprocess
+
+# Setup Vulkan
+subprocess.run(["mkdir", "-p", "/usr/share/vulkan/icd.d"], check=True)
+subprocess.run(["wget", "-q", "https://raw.githubusercontent.com/haosulab/ManiSkill/main/docker/nvidia_icd.json"], check=True)
+subprocess.run(["wget", "-q", "https://raw.githubusercontent.com/haosulab/ManiSkill/main/docker/10_nvidia.json"], check=True)
+subprocess.run(["mv", "nvidia_icd.json", "/usr/share/vulkan/icd.d"], check=True)
+subprocess.run(["mv", "10_nvidia.json", "/usr/share/glvnd/egl_vendor.d/10_nvidia.json"], check=True)
+subprocess.run(["apt-get", "install", "-y", "--no-install-recommends", "libvulkan-dev"], check=True)
+
+# Install Python dependencies
+subprocess.run(["pip", "install", "--upgrade", "mani_skill", "tyro"], check=True)
+
+
 ### Make sure to restart the notebook if you already ran a CPU sim!! ###
 # Import required packages
 import gymnasium as gym
