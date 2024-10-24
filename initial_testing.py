@@ -16,10 +16,14 @@ subprocess.run(["pip", "install", "--upgrade", "mani_skill", "tyro"], check=True
 
 ### Make sure to restart the notebook if you already ran a CPU sim!! ###
 # Import required packages
+import numpy as np
 import gymnasium as gym
-import mani_skill.envs as maniskill
+from tqdm.notebook import tqdm
+import mani_skill.envs
 import torch
+import matplotlib.pyplot as plt
 import time
+
 
 env_id = "PickCube-v1"
 obs_mode = "rgb+depth+segmentation"
