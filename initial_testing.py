@@ -26,14 +26,14 @@ import time
 
 
 env_id = "PickCube-v1"
-obs_mode = "rgb+depth+segmentation"
+obs_mode = "rgbd"
 control_mode = "pd_joint_delta_pos"
 reward_mode = "sparse"
 robot_uids = "panda"
 
 
 
-num_envs = 2048 # you can go up to 4096 on better GPUs
+num_envs = 1 # you can go up to 4096 on better GPUs
 
 
 try:
