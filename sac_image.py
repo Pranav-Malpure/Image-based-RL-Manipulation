@@ -24,11 +24,11 @@ import mani_skill.envs
 
 
 
-env_id = "PickCube-v1"
-obs_mode = "rgb+depth"
-control_mode = "pd_joint_delta_pos"
-reward_mode = "sparse"
-robot_uids = "panda"
+# env_id = "PickCube-v1"
+# obs_mode = "rgb+depth"
+# control_mode = "pd_joint_delta_pos"
+# reward_mode = "sparse"
+# robot_uids = "panda"
 
 
 @dataclass
@@ -334,12 +334,12 @@ class SAC(Args):
                     group="PPO",
                     tags=["ppo", "walltime_efficient"]
                 )
-            writer = SummaryWriter(f"runs/{run_name}")
-            writer.add_text(
+            self.writer = SummaryWriter(f"runs/{run_name}")
+            self.writer.add_text(
                 "hyperparameters",
                 "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(self.args).items()])),
             )
-            self.logger = Logger(log_wandb=self.args.track, tensorboard=writer)
+            self.logger = Logger(log_wandb=self.args.track, tensorboard=self.writer)
         else:
             print("Running evaluation")
 
@@ -546,7 +546,7 @@ class SAC(Args):
                 'log_alpha': self.log_alpha,
             }, model_path)
             print(f"model saved to {model_path}")
-            writer.close()
+            self.writer.close()
         self.envs.close()
 """
 if __name__ == "__main__":
