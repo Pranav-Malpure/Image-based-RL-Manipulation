@@ -548,7 +548,7 @@ class SAC(Args):
             print(f"model saved to {model_path}")
             writer.close()
         self.envs.close()
-
+"""
 if __name__ == "__main__":
 
     args = tyro.cli(Args)
@@ -819,3 +819,4 @@ if __name__ == "__main__":
         print(f"model saved to {model_path}")
         writer.close()
     envs.close()
+"""
