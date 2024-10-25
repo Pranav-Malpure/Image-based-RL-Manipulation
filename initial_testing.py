@@ -26,7 +26,7 @@ import time
 from sac_image import Args, SAC
 
 env_id = "PickCube-v1"
-obs_mode = "state"
+obs_mode = "rgb+depth"
 control_mode = "pd_joint_delta_pos"
 reward_mode = "sparse"
 robot_uids = "panda"
