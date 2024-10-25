@@ -216,7 +216,7 @@ LOG_STD_MIN = -5
 class Actor(nn.Module):
     def __init__(self, env):
         super().__init__()
-        print("obs_space", env.single_observation_space.shape)
+        print("obs_space", env.single_observation_space)
         self.backbone = nn.Sequential(
             nn.Linear(np.array(env.single_observation_space.shape).prod(), 256),
             nn.ReLU(),
