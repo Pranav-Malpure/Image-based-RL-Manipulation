@@ -195,7 +195,8 @@ class SoftQNetwork(nn.Module):
     def __init__(self, env):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(np.array(env.single_observation_space.shape).prod() + np.prod(env.single_action_space.shape), 256),
+            # nn.Linear(np.array(env.single_observation_space.shape).prod() + np.prod(env.single_action_space.shape), 256),
+            nn.Linear(128*12*12 + np.prod(env.single_action_space.shape), 256),
             nn.ReLU(),
             nn.Linear(256, 256),
             nn.ReLU(),
@@ -216,7 +217,7 @@ LOG_STD_MIN = -5
 class Actor(nn.Module):
     def __init__(self, env):
         super().__init__()
-        print("obs_space", env.single_observation_space)
+        # print("obs_space", env.single_observation_space)
         # self.backbone = nn.Sequential(
         #     nn.Linear(np.array(env.single_observation_space.shape).prod(), 256),
         #     nn.ReLU(),
@@ -228,7 +229,6 @@ class Actor(nn.Module):
         obs_space = env.single_observation_space['sensor_data']['base_camera']['rgb']
         obs_shape = obs_space.shape
         if obs_shape == (128, 128, 3):
-            # CNN backbone for image input
             self.backbone = nn.Sequential(
                 nn.Conv2d(3, 32, kernel_size=8, stride=4),  # Output: [32, 31, 31]
                 nn.ReLU(),
