@@ -217,14 +217,36 @@ class Actor(nn.Module):
     def __init__(self, env):
         super().__init__()
         print("obs_space", env.single_observation_space)
-        self.backbone = nn.Sequential(
-            nn.Linear(np.array(env.single_observation_space.shape).prod(), 256),
-            nn.ReLU(),
-            nn.Linear(256, 256),
-            nn.ReLU(),
-            nn.Linear(256, 256),
-            nn.ReLU(),
-        )
+        # self.backbone = nn.Sequential(
+        #     nn.Linear(np.array(env.single_observation_space.shape).prod(), 256),
+        #     nn.ReLU(),
+        #     nn.Linear(256, 256),
+        #     nn.ReLU(),
+        #     nn.Linear(256, 256),
+        #     nn.ReLU(),
+        # )
+        obs_space = env.single_observation_space['sensor_data']['base_camera']['rgb']
+        obs_shape = obs_space.shape
+        if obs_shape == (128, 128, 3):
+            # CNN backbone for image input
+            self.backbone = nn.Sequential(
+                nn.Conv2d(3, 32, kernel_size=8, stride=4),  # Output: [32, 31, 31]
+                nn.ReLU(),
+                nn.Conv2d(32, 64, kernel_size=4, stride=2),  # Output: [64, 14, 14]
+                nn.ReLU(),
+                nn.Conv2d(64, 128, kernel_size=3, stride=1),  # Output: [128, 12, 12]
+                nn.ReLU(),
+                nn.Flatten(),
+                nn.Linear(128 * 12 * 12, 256),  # Fully connected layer after flattening
+                nn.ReLU(),
+                nn.Linear(256, 256),
+                nn.ReLU(),
+                nn.Linear(256, 256),
+                nn.ReLU(),
+            )
+        else:
+            raise ValueError("Expected image shape (128, 128, 3) for RGB data")
+
         self.fc_mean = nn.Linear(256, np.prod(env.single_action_space.shape))
         self.fc_logstd = nn.Linear(256, np.prod(env.single_action_space.shape))
         # action rescaling
