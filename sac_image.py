@@ -284,9 +284,9 @@ class SAC(Args):
         self.args = Args # instance variable 
         if self.args.exp_name is None:
             self.args.exp_name = os.path.basename(__file__)[: -len(".py")]
-            run_name = f"{self.args.env_id}__{self.args.exp_name}__{self.args.seed}__{int(time.time())}"
+            self.run_name = f"{self.args.env_id}__{self.args.exp_name}__{self.args.seed}__{int(time.time())}"
         else:
-            run_name = self.args.exp_name
+            self.run_name = self.args.exp_name
 
         # TRY NOT TO MODIFY: seeding
         random.seed(self.args.seed)
@@ -303,13 +303,13 @@ class SAC(Args):
             self.envs= FlattenActionSpaceWrapper(self.envs)
             self.eval_envs = FlattenActionSpaceWrapper(self.eval_envs)
         if self.args.capture_video:
-            self.eval_output_dir = f"runs/{run_name}/videos"
+            self.eval_output_dir = f"runs/{self.run_name}/videos"
             if self.args.evaluate:
                 self.eval_output_dir = f"{os.path.dirname(self.args.checkpoint)}/test_videos"
             print(f"Saving eval videos to {self.eval_output_dir}")
             if self.args.save_train_video_freq is not None:
                 save_video_trigger = lambda x : (x // self.args.num_steps) % self.args.save_train_video_freq == 0
-                self.envs = RecordEpisode(self.envs, output_dir=f"runs/{run_name}/train_videos", save_trajectory=False, save_video_trigger=save_video_trigger, max_steps_per_video=self.args.num_steps, video_fps=30)
+                self.envs = RecordEpisode(self.envs, output_dir=f"runs/{self.run_name}/train_videos", save_trajectory=False, save_video_trigger=save_video_trigger, max_steps_per_video=self.args.num_steps, video_fps=30)
             self.eval_envs = RecordEpisode(self.eval_envs, output_dir=self.eval_output_dir, save_trajectory=self.args.evaluate, trajectory_name="trajectory", max_steps_per_video=self.args.num_eval_steps, video_fps=30)
         self.envs = ManiSkillVectorEnv(self.envs, self.args.num_envs, ignore_terminations=not self.args.partial_reset, record_metrics=True)
         self.eval_envs = ManiSkillVectorEnv(self.eval_envs, self.args.num_eval_envs, ignore_terminations=True, record_metrics=True)
@@ -329,12 +329,12 @@ class SAC(Args):
                     entity=self.args.wandb_entity,
                     sync_tensorboard=False,
                     config=config,
-                    name=run_name,
+                    name=self.run_name,
                     save_code=True,
                     group="PPO",
                     tags=["ppo", "walltime_efficient"]
                 )
-            self.writer = SummaryWriter(f"runs/{run_name}")
+            self.writer = SummaryWriter(f"runs/{self.run_name}")
             self.writer.add_text(
                 "hyperparameters",
                 "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(self.args).items()])),
@@ -417,7 +417,7 @@ class SAC(Args):
                 self.actor.train()
 
                 if self.args.save_model:
-                    model_path = f"runs/{run_name}/ckpt_{global_step}.pt"
+                    model_path = f"runs/{self.run_name}/ckpt_{global_step}.pt"
                     torch.save({
                         'actor': self.actor.state_dict(),
                         'qf1': self.qf1_target.state_dict(),
@@ -538,7 +538,7 @@ class SAC(Args):
                     self.logger.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
 
         if not self.args.evaluate and self.args.save_model:
-            model_path = f"runs/{run_name}/final_ckpt.pt"
+            model_path = f"runs/{self.run_name}/final_ckpt.pt"
             torch.save({
                 'actor': self.actor.state_dict(),
                 'qf1': self.qf1_target.state_dict(),
