@@ -149,7 +149,8 @@ class ReplayBuffer:
         self.num_envs = num_envs
         self.storage_device = storage_device
         self.sample_device = sample_device
-        self.obs = torch.zeros((buffer_size, num_envs) + env.single_observation_space.shape).to(storage_device)
+        # self.obs = torch.zeros((buffer_size, num_envs) + env.single_observation_space.shape).to(storage_device)
+        self.obs = torch.zeros((buffer_size, num_envs) + 128*12*12).to(storage_device)
         self.next_obs = torch.zeros((buffer_size, num_envs) + env.single_observation_space.shape).to(storage_device)
         self.actions = torch.zeros((buffer_size, num_envs) + env.single_action_space.shape).to(storage_device)
         self.logprobs = torch.zeros((buffer_size, num_envs)).to(storage_device)
