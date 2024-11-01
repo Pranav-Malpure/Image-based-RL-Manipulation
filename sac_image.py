@@ -314,7 +314,7 @@ class SoftQNetwork(nn.Module):
         sample_obs, _ = env.reset()
 
         with torch.no_grad():
-            n_flatten = cnn(sample_obs['sensor_data']['base_camera']["rgb"].float().permute(0,3,1,2)).shape[1]
+            n_flatten = cnn(sample_obs['sensor_data']['base_camera']["rgb"].float().permute(0,3,1,2).cpu()).shape[1]
             self.fc = nn.Sequential(nn.Linear(n_flatten + np.prod(env.single_action_space.shape), feature_size), nn.ReLU(),
                                nn.Linear(256, 256),
                                 nn.ReLU(),
@@ -416,7 +416,7 @@ class Actor(nn.Module):
             )
             sample_obs, _ = env.reset()
             with torch.no_grad():
-                n_flatten = self.cnn(sample_obs['sensor_data']['base_camera']["rgb"].float().permute(0,3,1,2)).shape[1]
+                n_flatten = self.cnn(sample_obs['sensor_data']['base_camera']["rgb"].float().permute(0,3,1,2).cpu()).shape[1]
                 self.backbone = nn.Sequential(nn.Linear(n_flatten, 256), nn.ReLU(),
                                         nn.ReLU(),
                                         nn.Linear(256, 256),
