@@ -150,15 +150,22 @@ class ReplayBuffer:
         self.num_envs = num_envs
         self.storage_device = storage_device
         self.sample_device = sample_device
+        print("line 153")
         # self.obs = torch.zeros((buffer_size, num_envs) + env.single_observation_space.shape).to(storage_device)
         self.obs = torch.zeros((buffer_size, num_envs) + (128,12,12)).to(storage_device)
+        print("line 155")
         self.next_obs = torch.zeros((buffer_size, num_envs) + env.single_observation_space.shape).to(storage_device)
+        print("line 158")
         self.actions = torch.zeros((buffer_size, num_envs) + env.single_action_space.shape).to(storage_device)
+        print("line 160")
         self.logprobs = torch.zeros((buffer_size, num_envs)).to(storage_device)
+        print("line 162")
         self.rewards = torch.zeros((buffer_size, num_envs)).to(storage_device)
+        print("line 164")
         self.dones = torch.zeros((buffer_size, num_envs)).to(storage_device)
+        print("line 166")
         self.values = torch.zeros((buffer_size, num_envs)).to(storage_device)
-
+        print("line 168")
     def add(self, obs: torch.Tensor, next_obs: torch.Tensor, action: torch.Tensor, reward: torch.Tensor, done: torch.Tensor):
         if self.storage_device == torch.device("cpu"):
             obs = obs.cpu()
@@ -583,7 +590,7 @@ class SAC(Args):
             self.a_optimizer = optim.Adam([self.log_alpha], lr=self.args.q_lr)
         else:
             self.alpha = self.args.alpha
-        print("Hereeee!")
+
         self.envs.single_observation_space.dtype = np.float32
         print("line 588 now")
         self.rb = ReplayBuffer(
