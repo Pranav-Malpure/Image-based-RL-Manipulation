@@ -529,6 +529,9 @@ class SAC(Args):
             print("Running training")
             if self.args.track:
                 import wandb
+                
+                print("Using wandb")
+
                 config = vars(self.args)
                 config["env_cfg"] = dict(**self.env_kwargs, num_envs=self.args.num_envs, env_id=self.args.env_id, reward_mode="normalized_dense", env_horizon=self.max_episode_steps, partial_reset=self.args.partial_reset)
                 config["eval_env_cfg"] = dict(**self.env_kwargs, num_envs=self.args.num_eval_envs, env_id=self.args.env_id, reward_mode="normalized_dense", env_horizon=self.max_episode_steps, partial_reset=False)
@@ -552,6 +555,7 @@ class SAC(Args):
             print("Running evaluation")
 
 
+        print("line 558 now")
         self.max_action = float(self.envs.single_action_space.high[0])
 
         self.actor = Actor(self.envs).to(self.device)
@@ -568,6 +572,8 @@ class SAC(Args):
         self.qf2_target.load_state_dict(self.qf2.state_dict())
         self.q_optimizer = optim.Adam(list(self.qf1.parameters()) + list(self.qf2.parameters()), lr=self.args.q_lr)
         self.actor_optimizer = optim.Adam(list(self.actor.parameters()), lr=self.args.policy_lr)
+
+        print("line 576 now")
 
         # Automatic entropy tuning
         if self.args.autotune:
@@ -598,7 +604,10 @@ class SAC(Args):
 
         global_steps_per_iteration = self.args.num_envs * (self.args.steps_per_env)
 
+        print("yo yo")
         while global_step < self.args.total_timesteps:
+            print("yo yo 2")
+
             if self.args.eval_freq > 0 and (global_step - self.args.training_freq) // self.args.eval_freq < global_step // self.args.eval_freq:
                 # evaluate
                 self.actor.eval()
@@ -672,6 +681,7 @@ class SAC(Args):
 
             update_time = time.time()
             learning_has_started = True
+            print("learning has started")
             for local_update in range(self.args.grad_steps_per_iteration):
                 global_update += 1
                 data = self.rb.sample(self.args.batch_size)
