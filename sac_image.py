@@ -473,6 +473,7 @@ class Actor(nn.Module):
 
 
 class Logger:
+    import wandb
     def __init__(self, log_wandb=False, tensorboard: SummaryWriter = None) -> None:
         self.writer = tensorboard
         self.log_wandb = log_wandb
