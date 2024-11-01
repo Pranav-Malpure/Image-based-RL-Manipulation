@@ -152,6 +152,9 @@ class ReplayBuffer:
         self.sample_device = sample_device
         print("line 153")
         # self.obs = torch.zeros((buffer_size, num_envs) + env.single_observation_space.shape).to(storage_device)
+        print("buffer_size",buffer_size)
+        print("num_envs",num_envs)
+        print("addition", (buffer_size, num_envs) + (128,12,12))
         self.obs = torch.zeros((buffer_size, num_envs) + (128,12,12)).to(storage_device)
         print("line 155")
         self.next_obs = torch.zeros((buffer_size, num_envs) + env.single_observation_space.shape).to(storage_device)
