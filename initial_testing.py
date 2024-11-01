@@ -54,6 +54,8 @@ def main():
     sac_agent = SAC(args)
     try:
         sac_agent.start_game()
+    except KeyboardInterrupt:
+        print("Training interrupted manually.")
     except Exception as e:
         print(e)
 
