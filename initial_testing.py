@@ -52,7 +52,11 @@ def main():
                 reward_mode=reward_mode, robot_uids=robot_uids, enable_shadow=True)
 
     sac_agent = SAC(args)
-    sac_agent.start_game()
+    try:
+        sac_agent.start_game()
+    except Exception as e:
+        print(e)
+
     # env.unwrapped.print_sim_details()
     # obs, info_reset = env.reset()
     # print("Observation Space:", obs)
