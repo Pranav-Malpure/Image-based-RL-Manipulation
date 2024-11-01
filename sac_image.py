@@ -583,8 +583,9 @@ class SAC(Args):
             self.a_optimizer = optim.Adam([self.log_alpha], lr=self.args.q_lr)
         else:
             self.alpha = self.args.alpha
-
+        print("Hereeee!")
         self.envs.single_observation_space.dtype = np.float32
+        print("line 588 now")
         self.rb = ReplayBuffer(
             env=self.envs,
             num_envs=self.args.num_envs,
