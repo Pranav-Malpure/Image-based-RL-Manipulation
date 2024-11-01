@@ -21,6 +21,7 @@ from torch.utils.tensorboard import SummaryWriter
 import tyro
 
 import mani_skill.envs
+from torch.distributions.normal import Normal
 
 
 
@@ -191,62 +192,236 @@ class ReplayBuffer:
             dones=self.dones[batch_inds, env_inds].to(self.sample_device)
         )
 
-# ALGO LOGIC: initialize agent here:
+
+
+def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
+    torch.nn.init.orthogonal_(layer.weight, std)
+    torch.nn.init.constant_(layer.bias, bias_const)
+    return layer
+
+class NatureCNN(nn.Module):
+    def __init__(self, sample_obs):
+        super().__init__()
+
+        extractors = {}
+
+        self.out_features = 0
+        feature_size = 256
+        in_channels=sample_obs["rgb"].shape[-1]
+        image_size=(sample_obs["rgb"].shape[1], sample_obs["rgb"].shape[2])
+
+
+        # here we use a NatureCNN architecture to process images, but any architecture is permissble here
+        cnn = nn.Sequential(
+            nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=32,
+                kernel_size=8,
+                stride=4,
+                padding=0,
+            ),
+            nn.ReLU(),
+            nn.Conv2d(
+                in_channels=32, out_channels=64, kernel_size=4, stride=2, padding=0
+            ),
+            nn.ReLU(),
+            nn.Conv2d(
+                in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=0
+            ),
+            nn.ReLU(),
+            nn.Flatten(),
+        )
+
+        # to easily figure out the dimensions after flattening, we pass a test tensor
+        with torch.no_grad():
+            n_flatten = cnn(sample_obs["rgb"].float().permute(0,3,1,2).cpu()).shape[1]
+            fc = nn.Sequential(nn.Linear(n_flatten, feature_size), nn.ReLU())
+        extractors["rgb"] = nn.Sequential(cnn, fc)
+        self.out_features += feature_size
+
+        if "state" in sample_obs:
+            # for state data we simply pass it through a single linear layer
+            state_size = sample_obs["state"].shape[-1]
+            extractors["state"] = nn.Linear(state_size, 256)
+            self.out_features += 256
+
+        self.extractors = nn.ModuleDict(extractors)
+
+    def forward(self, observations) -> torch.Tensor:
+        encoded_tensor_list = []
+        # self.extractors contain nn.Modules that do all the processing.
+        for key, extractor in self.extractors.items():
+            obs = observations[key]
+            if key == "rgb":
+                obs = obs.float().permute(0,3,1,2)
+                obs = obs / 255
+            encoded_tensor_list.append(extractor(obs))
+        return torch.cat(encoded_tensor_list, dim=1)
+
+
 class SoftQNetwork(nn.Module):
     def __init__(self, env):
         super().__init__()
-        self.net = nn.Sequential(
-            # nn.Linear(np.array(env.single_observation_space.shape).prod() + np.prod(env.single_action_space.shape), 256),
-            nn.Linear(128*12*12 + np.prod(env.single_action_space.shape), 256),
-            nn.ReLU(),
-            nn.Linear(256, 256),
-            nn.ReLU(),
-            nn.Linear(256, 256),
-            nn.ReLU(),
-            nn.Linear(256, 1),
-        )
 
-    def forward(self, x, a):
-        x = torch.cat([x, a], 1)
-        return self.net(x)
+        extractors = {}
+
+        feature_size = 256
+        in_channels=env.single_observation_space['sensor_data']['base_camera']['rgb'].shape[-1]
+        # cnn = nn.Sequential(
+        #     nn.Conv2d(
+        #         in_channels=in_channels,
+        #         out_channels=32,
+        #         kernel_size=8,
+        #         stride=4,
+        #         padding=0,
+        #     ),
+        #     nn.ReLU(),
+        #     nn.Conv2d(
+        #         in_channels=32, out_channels=64, kernel_size=4, stride=2, padding=0
+        #     ),
+        #     nn.ReLU(),
+        #     nn.Conv2d(
+        #         in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=0
+        #     ),
+        #     nn.ReLU(),
+        #     nn.Flatten(),
+        # )
+
+        cnn = nn.Sequential(
+            nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=32,
+                kernel_size=8,
+                stride=4,
+                padding=0,
+            ),
+            nn.ReLU(),
+            nn.Conv2d(
+                in_channels=32, out_channels=64, kernel_size=4, stride=2, padding=0
+            ),
+            nn.ReLU(),
+            nn.Conv2d(
+                in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=0
+            ),
+            nn.ReLU(),
+            nn.Flatten(),
+            # nn.Linear(9216, 256),
+            # nn.ReLU(),
+            # nn.Linear(256, 256),
+            # nn.ReLU(),
+            # nn.Linear(256, 1),
+        )
+        with torch.no_grad():
+            n_flatten = cnn(env.single_observation_space['sensor_data']['base_camera']["rgb"].float().permute(0,3,1,2).cpu()).shape[1]
+            self.fc = nn.Sequential(nn.Linear(n_flatten + np.prod(env.single_action_space.shape), feature_size), nn.ReLU(),
+                               nn.Linear(256, 256),
+                                nn.ReLU(),
+                                nn.Linear(256, 256),
+                                nn.ReLU(),
+                                nn.Linear(256, 1))
+        extractors["rgb"] = nn.Sequential(cnn, self.fc)
+        self.out_features += feature_size
+
+        self.extractors = nn.ModuleDict(extractors)
+
+
+    def forward(self, observations, actions) -> torch.Tensor:
+        encoded_tensor_list = []
+        # self.extractors contain nn.Modules that do all the processing.
+        for key, extractor in self.extractors.items():
+            obs = observations[key]
+            if key == "rgb":
+                obs = obs.float().permute(0,3,1,2)
+                obs = obs / 255
+            encoded_tensor_list.append(extractor(obs))
+
+            encoded_tensor = torch.cat(encoded_tensor_list, dim=1)
+            x = torch.cat([encoded_tensor, actions], dim=1)
+        return self.fc(x)
+    
+    # def forward(self, x, a):
+    #     encoded_tensor_list = []        
+    #     x = torch.cat([x, a], 1)
+    #     return self.net(x)
+        
+
+    #     # to easily figure out the dimensions after flattening, we pass a test tensor
+    #     with torch.no_grad():
+    #         n_flatten = cnn(env.single_observation_space['sensor_data']['base_camera']["rgb"].float().permute(0,3,1,2).cpu()).shape[1]
+    #         fc = nn.Sequential(nn.Linear(n_flatten, feature_size), nn.ReLU())
+    #     extractors["rgb"] = nn.Sequential(cnn, fc)
+    #     self.out_features += feature_size
+
+    #     if "state" in env.single_observation_space['sensor_data']:
+    #         # for state data we simply pass it through a single linear layer
+    #         state_size = env.single_observation_space['sensor_data']['base_camera']["state"].shape[-1]
+    #         extractors["state"] = nn.Linear(state_size, 256)
+    #         self.out_features += 256
+
+    #     self.extractors = nn.ModuleDict(extractors)
+
+    # def forward(self, observations) -> torch.Tensor:
+    #     encoded_tensor_list = []
+    #     # self.extractors contain nn.Modules that do all the processing.
+    #     for key, extractor in self.extractors.items():
+    #         obs = observations[key]
+    #         if key == "rgb":
+    #             obs = obs.float().permute(0,3,1,2)
+    #             obs = obs / 255
+    #         encoded_tensor_list.append(extractor(obs))
+    #     return torch.cat(encoded_tensor_list, dim=1)
+
+
+        
 
 
 LOG_STD_MAX = 2
 LOG_STD_MIN = -5
 
-
+# ALGO LOGIC: initialize agent here:
 class Actor(nn.Module):
     def __init__(self, env):
         super().__init__()
-        # print("obs_space", env.single_observation_space)
-        # self.backbone = nn.Sequential(
-        #     nn.Linear(np.array(env.single_observation_space.shape).prod(), 256),
-        #     nn.ReLU(),
-        #     nn.Linear(256, 256),
-        #     nn.ReLU(),
-        #     nn.Linear(256, 256),
-        #     nn.ReLU(),
-        # )
+
+
+
         obs_space = env.single_observation_space['sensor_data']['base_camera']['rgb']
         obs_shape = obs_space.shape
+        in_channels=env.single_observation_space['sensor_data']['base_camera']['rgb'].shape[-1]
         if obs_shape == (128, 128, 3):
-            self.backbone = nn.Sequential(
-                nn.Conv2d(3, 32, kernel_size=8, stride=4),  # Output: [32, 31, 31]
+            self.cnn = nn.Sequential(
+                    nn.Conv2d(
+                    in_channels=in_channels,
+                    out_channels=32,
+                    kernel_size=8,
+                    stride=4,
+                    padding=0,
+                ),
                 nn.ReLU(),
-                nn.Conv2d(32, 64, kernel_size=4, stride=2),  # Output: [64, 14, 14]
+                nn.Conv2d(
+                    in_channels=32, out_channels=64, kernel_size=4, stride=2, padding=0
+                ),
                 nn.ReLU(),
-                nn.Conv2d(64, 128, kernel_size=3, stride=1),  # Output: [128, 12, 12]
+                nn.Conv2d(
+                    in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=0
+                ),
                 nn.ReLU(),
                 nn.Flatten(),
-                nn.Linear(128 * 12 * 12, 256),  # Fully connected layer after flattening
-                nn.ReLU(),
-                nn.Linear(256, 256),
-                nn.ReLU(),
-                nn.Linear(256, 256),
-                nn.ReLU(),
+
             )
+            with torch.no_grad():
+                n_flatten = self.cnn(env.single_observation_space['sensor_data']['base_camera']["rgb"].float().permute(0,3,1,2).cpu()).shape[1]
+                self.backbone = nn.Sequential(nn.Linear(n_flatten, 256), nn.ReLU(),
+                                        nn.ReLU(),
+                                        nn.Linear(256, 256),
+                                        nn.ReLU(),
+                                        nn.Linear(256, 256),
+                                        nn.ReLU(),
+                                    )
         else:
             raise ValueError("Expected image shape (128, 128, 3) for RGB data")
+
+
 
         self.fc_mean = nn.Linear(256, np.prod(env.single_action_space.shape))
         self.fc_logstd = nn.Linear(256, np.prod(env.single_action_space.shape))
@@ -257,7 +432,7 @@ class Actor(nn.Module):
         # will be saved in the state_dict
 
     def forward(self, x):
-        x = self.backbone(x)
+        x = self.backbone(self.cnn(x))
         mean = self.fc_mean(x)
         log_std = self.fc_logstd(x)
         log_std = torch.tanh(log_std)
@@ -266,7 +441,7 @@ class Actor(nn.Module):
         return mean, log_std
 
     def get_eval_action(self, x):
-        x = self.backbone(x)
+        x = self.backbone(self.cnn(x))
         mean = self.fc_mean(x)
         action = torch.tanh(mean) * self.action_scale + self.action_bias
         return action
@@ -289,6 +464,7 @@ class Actor(nn.Module):
         self.action_scale = self.action_scale.to(device)
         self.action_bias = self.action_bias.to(device)
         return super().to(device)
+
 
 class Logger:
     def __init__(self, log_wandb=False, tensorboard: SummaryWriter = None) -> None:
