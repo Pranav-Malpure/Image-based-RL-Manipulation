@@ -52,6 +52,7 @@ def main():
     args = Args(env_id=env_id, num_envs=num_envs, num_eval_envs=num_eval_envs, obs_mode=obs_mode, control_mode=control_mode, 
                 reward_mode=reward_mode, robot_uids=robot_uids, enable_shadow=True)
 
+    print("hey not even till here??")
     sac_agent = SAC(args)
     try:
         sac_agent.start_game()
