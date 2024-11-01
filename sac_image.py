@@ -592,6 +592,8 @@ class SAC(Args):
             storage_device=torch.device(self.args.buffer_device),
             sample_device=self.device
         )
+
+        print("line 596 now")
     
 
     def start_game(self):
