@@ -577,7 +577,7 @@ class SAC(Args):
             self.alpha = self.args.alpha
 
         self.envs.single_observation_space.dtype = np.float32
-        rb = ReplayBuffer(
+        self.rb = ReplayBuffer(
             env=self.envs,
             num_envs=self.args.num_envs,
             buffer_size=self.args.buffer_size,
@@ -658,7 +658,7 @@ class SAC(Args):
                     for k, v in final_info["episode"].items():
                         self.logger.add_scalar(f"train/{k}", v[done_mask].float().mean(), global_step)
 
-                rb.add(obs, real_next_obs, actions, rewards, next_done)
+                self.rb.add(obs, real_next_obs, actions, rewards, next_done)
 
                 # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
                 obs = next_obs
@@ -672,7 +672,7 @@ class SAC(Args):
             learning_has_started = True
             for local_update in range(self.args.grad_steps_per_iteration):
                 global_update += 1
-                data = rb.sample(self.args.batch_size)
+                data = self.rb.sample(self.args.batch_size)
 
                 # update the value networks
                 with torch.no_grad():
