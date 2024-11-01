@@ -388,6 +388,9 @@ class Actor(nn.Module):
         obs_space = env.single_observation_space['sensor_data']['base_camera']['rgb']
         obs_shape = obs_space.shape
         in_channels=env.single_observation_space['sensor_data']['base_camera']['rgb'].shape[-1]
+
+        print("obs_shape", obs_shape)
+        print("obs_shape", obs_shape)
         if obs_shape == (128, 128, 3):
             self.cnn = nn.Sequential(
                     nn.Conv2d(
