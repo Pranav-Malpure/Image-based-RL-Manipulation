@@ -628,11 +628,11 @@ class SAC(Args):
                 eval_obs, _ = self.eval_envs.reset()
                 eval_metrics = defaultdict(list)
                 num_episodes = 0
-                print("eval obs", eval_obs['sensor_data']['base_camera']['rgb'])
+                # print("eval obs", eval_obs['sensor_data']['base_camera']['rgb'])
                 for _ in range(self.args.num_eval_steps):
                     with torch.no_grad():
                         print("Evaluating now")
-                        eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = self.eval_envs.step(self.actor.get_eval_action(eval_obs['sensor_data']['base_camera']['rgb']))
+                        eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = self.eval_envs.step(self.actor.get_eval_action(eval_obs['sensor_data']['base_camera']['rgb'].float()/255.0))
                         print("Evaluating now 2")
                         if "final_info" in eval_infos:
                             mask = eval_infos["_final_info"]
