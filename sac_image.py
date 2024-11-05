@@ -628,7 +628,7 @@ class SAC(Args):
                 eval_obs, _ = self.eval_envs.reset()
                 eval_metrics = defaultdict(list)
                 num_episodes = 0
-                # print("eval obs", eval_obs)
+                print("eval obs", eval_obs['sensor_data']['base_camera']['rgb'])
                 for _ in range(self.args.num_eval_steps):
                     with torch.no_grad():
                         print("Evaluating now")
