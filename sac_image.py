@@ -78,7 +78,7 @@ class Args:
     # Algorithm specific arguments
     total_timesteps: int = 1_000_000
     """total timesteps of the experiments"""
-    buffer_size: int = 1_000_000
+    buffer_size: int = 1
     """the replay memory buffer size"""
     buffer_device: str = "cpu"
     """where the replay buffer is stored. Can be 'cpu' or 'cuda' for GPU"""
