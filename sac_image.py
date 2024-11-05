@@ -632,9 +632,7 @@ class SAC(Args):
                 # print("eval obs", eval_obs['sensor_data']['base_camera']['rgb'])
                 for _ in range(self.args.num_eval_steps):
                     with torch.no_grad():
-                        print("Evaluating now")
                         eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = self.eval_envs.step(self.actor.get_eval_action(eval_obs_rgb.permute(0,3,1,2)))
-                        print("Evaluating now 2")
                         if "final_info" in eval_infos:
                             mask = eval_infos["_final_info"]
                             num_episodes += mask.sum()
