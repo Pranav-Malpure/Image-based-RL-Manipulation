@@ -157,7 +157,7 @@ class ReplayBuffer:
         print("addition", (buffer_size, num_envs) + env.single_observation_space['sensor_data']['base_camera']['rgb'].shape)
         self.obs = torch.zeros((buffer_size, num_envs) + env.single_observation_space['sensor_data']['base_camera']['rgb'].shape).to(storage_device)
         print("line 155")
-        self.next_obs = torch.zeros((buffer_size, num_envs) + env.single_observation_space.shape).to(storage_device)
+        self.next_obs = torch.zeros((buffer_size, num_envs) + env.single_observation_space['sensor_data']['base_camera']['rgb'].shape).to(storage_device)
         print("line 158")
         self.actions = torch.zeros((buffer_size, num_envs) + env.single_action_space.shape).to(storage_device)
         print("line 160")
