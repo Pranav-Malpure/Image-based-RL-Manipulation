@@ -630,7 +630,9 @@ class SAC(Args):
                 num_episodes = 0
                 for _ in range(self.args.num_eval_steps):
                     with torch.no_grad():
+                        print("Evaluating now")
                         eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = self.eval_envs.step(self.actor.get_eval_action(eval_obs))
+                        print("Evaluating now 2")
                         if "final_info" in eval_infos:
                             mask = eval_infos["_final_info"]
                             num_episodes += mask.sum()
