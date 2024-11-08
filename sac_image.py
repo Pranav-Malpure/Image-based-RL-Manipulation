@@ -24,7 +24,7 @@ import mani_skill.envs
 from torch.distributions.normal import Normal
 
 from pathlib import Path
-from efficient_replay_buffer import ReplayBuffer, ReplayBufferStorage, make_replay_loader
+from efficient_replay_buffer import ReplayBuffer, ReplayBufferStorage, make_replay_loader, replay_iter
 
 # env_id = "PickCube-v1"
 # obs_mode = "rgb+depth"
@@ -599,7 +599,7 @@ class SAC(Args):
         self.work_dir = Path.cwd()
         data_spec = ()
         self.rb = ReplayBufferStorage(data_specs=data_spec, replay_dir=self.work_dir / 'buffer')
-
+        self.replay_iter = None
         self.replay_loader = make_replay_loader(self.work_dir / 'buffer', self.args.buffer_size,
             self.args.batch_size, self.args.replay_buffer_num_workers,
             self.args.nstep, self.args.gamma, save_snapshot=False)
@@ -703,7 +703,7 @@ class SAC(Args):
             for local_update in range(self.args.grad_steps_per_iteration):
                 global_update += 1
                 # data = self.rb.sample(self.args.batch_size) # TODO: have to replace this with the method in efficient replay buffer
-                
+                data = replay_iter(self.replay_loader)
 
                 # update the value networks
                 with torch.no_grad():
