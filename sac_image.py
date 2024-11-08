@@ -601,8 +601,8 @@ class SAC(Args):
         self.rb = ReplayBufferStorage(data_specs=data_spec, replay_dir=self.work_dir / 'buffer')
         self.replay_iter = None
         self.replay_loader = make_replay_loader(self.work_dir / 'buffer', self.args.buffer_size,
-            self.args.batch_size, self.args.replay_buffer_num_workers,
-            self.args.nstep, self.args.gamma, save_snapshot=False)
+            self.args.batch_size, self.args.replay_buffer_num_workers, False,
+            self.args.nstep, self.args.gamma)
         # self._replay_iter = None  # type: dont know needed or not as of now # TODO:
         print("line 596 now")
     
