@@ -23,7 +23,8 @@ import tyro
 import mani_skill.envs
 from torch.distributions.normal import Normal
 
-
+from pathlib import Path
+from efficient_replay_buffer import ReplayBuffer, ReplayBufferStorage, make_replay_loader
 
 # env_id = "PickCube-v1"
 # obs_mode = "rgb+depth"
@@ -78,7 +79,7 @@ class Args:
     # Algorithm specific arguments
     total_timesteps: int = 1_000_000
     """total timesteps of the experiments"""
-    buffer_size: int = 1
+    buffer_size: int = 1_000_000
     """the replay memory buffer size"""
     buffer_device: str = "cpu"
     """where the replay buffer is stored. Can be 'cpu' or 'cuda' for GPU"""
@@ -110,7 +111,10 @@ class Args:
     """whether to let parallel environments reset upon termination instead of truncation"""
     bootstrap_at_done: str = "always"
     """the bootstrap method to use when a done signal is received. Can be 'always' or 'never'"""
-
+    replay_buffer_num_workers: int = 1 # TODO: have to verify this
+    """the number of parallel workers to use for the replay buffer"""
+    nstep: int = 1 # TODO: have to verify this
+    """the n-step return"""
     # to be filled in runtime
     grad_steps_per_iteration: int = 0
     """the number of gradient updates per iteration"""
@@ -150,25 +154,13 @@ class ReplayBuffer:
         self.num_envs = num_envs
         self.storage_device = storage_device
         self.sample_device = sample_device
-        print("line 153")
-        # self.obs = torch.zeros((buffer_size, num_envs) + env.single_observation_space.shape).to(storage_device)
-        print("buffer_size",buffer_size)
-        print("num_envs",num_envs)
-        print("addition", (buffer_size, num_envs) + env.single_observation_space['sensor_data']['base_camera']['rgb'].shape)
         self.obs = torch.zeros((buffer_size, num_envs) + env.single_observation_space['sensor_data']['base_camera']['rgb'].shape).to(storage_device)
-        print("line 155")
         self.next_obs = torch.zeros((buffer_size, num_envs) + env.single_observation_space['sensor_data']['base_camera']['rgb'].shape).to(storage_device)
-        print("line 158")
         self.actions = torch.zeros((buffer_size, num_envs) + env.single_action_space.shape).to(storage_device)
-        print("line 160")
         self.logprobs = torch.zeros((buffer_size, num_envs)).to(storage_device)
-        print("line 162")
         self.rewards = torch.zeros((buffer_size, num_envs)).to(storage_device)
-        print("line 164")
         self.dones = torch.zeros((buffer_size, num_envs)).to(storage_device)
-        print("line 166")
         self.values = torch.zeros((buffer_size, num_envs)).to(storage_device)
-        print("line 168")
     def add(self, obs: torch.Tensor, next_obs: torch.Tensor, action: torch.Tensor, reward: torch.Tensor, done: torch.Tensor):
         if self.storage_device == torch.device("cpu"):
             obs = obs.cpu()
@@ -596,14 +588,22 @@ class SAC(Args):
 
         self.envs.single_observation_space.dtype = np.float32
         print("line 588 now")
-        self.rb = ReplayBuffer(
-            env=self.envs,
-            num_envs=self.args.num_envs,
-            buffer_size=self.args.buffer_size,
-            storage_device=torch.device(self.args.buffer_device),
-            sample_device=self.device
-        )
+        # self.rb = ReplayBuffer(
+        #     env=self.envs,
+        #     num_envs=self.args.num_envs,
+        #     buffer_size=self.args.buffer_size,
+        #     storage_device=torch.device(self.args.buffer_device),
+        #     sample_device=self.device
+        # )
 
+        self.work_dir = Path.cwd()
+        data_spec = ()
+        self.rb = ReplayBufferStorage(data_specs=data_spec, replay_dir=self.work_dir / 'buffer')
+
+        self.replay_loader = make_replay_loader(self.work_dir / 'buffer', self.args.buffer_size,
+            self.args.batch_size, self.args.replay_buffer_num_workers,
+            self.args.nstep, self.args.gamma, save_snapshot=False)
+        # self._replay_iter = None  # type: dont know needed or not as of now # TODO:
         print("line 596 now")
     
 
@@ -684,7 +684,10 @@ class SAC(Args):
                     for k, v in final_info["episode"].items():
                         self.logger.add_scalar(f"train/{k}", v[done_mask].float().mean(), global_step)
 
-                self.rb.add(obs, real_next_obs, actions, rewards, next_done)
+                # self.rb.add(obs, real_next_obs, actions, rewards, next_done)
+
+                self.rb.add(obs, next_obs, actions, rewards, next_done)
+
 
                 # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
                 obs = next_obs
@@ -699,7 +702,8 @@ class SAC(Args):
             print("learning has started")
             for local_update in range(self.args.grad_steps_per_iteration):
                 global_update += 1
-                data = self.rb.sample(self.args.batch_size)
+                # data = self.rb.sample(self.args.batch_size) # TODO: have to replace this with the method in efficient replay buffer
+                
 
                 # update the value networks
                 with torch.no_grad():
