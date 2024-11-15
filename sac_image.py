@@ -393,8 +393,8 @@ class Actor(nn.Module):
         obs_shape = obs_space.shape
         in_channels=env.single_observation_space['sensor_data']['base_camera']['rgb'].shape[-1]
 
-        print("obs_shape", obs_shape)
-        print("obs_shape", obs_shape)
+        # print("obs_shape", obs_shape)
+        # print("obs_shape", obs_shape)
         if obs_shape == (128, 128, 3):
             self.cnn = nn.Sequential(
                     nn.Conv2d(
@@ -575,7 +575,7 @@ class SAC(Args):
         self.q_optimizer = optim.Adam(list(self.qf1.parameters()) + list(self.qf2.parameters()), lr=self.args.q_lr)
         self.actor_optimizer = optim.Adam(list(self.actor.parameters()), lr=self.args.policy_lr)
 
-        print("line 576 now")
+        # print("line 576 now")
 
         # Automatic entropy tuning
         if self.args.autotune:
@@ -587,7 +587,7 @@ class SAC(Args):
             self.alpha = self.args.alpha
 
         self.envs.single_observation_space.dtype = np.float32
-        print("line 588 now")
+        # print("line 588 now")
         # self.rb = ReplayBuffer(
         #     env=self.envs,
         #     num_envs=self.args.num_envs,
@@ -604,7 +604,7 @@ class SAC(Args):
             self.args.batch_size, self.args.replay_buffer_num_workers, False,
             self.args.nstep, self.args.gamma)
         # self._replay_iter = None  # type: dont know needed or not as of now # TODO:
-        print("line 596 now")
+        # print("line 596 now")
     
 
     def start_game(self):
@@ -617,9 +617,9 @@ class SAC(Args):
 
         global_steps_per_iteration = self.args.num_envs * (self.args.steps_per_env)
 
-        print("yo yo")
+        # print("yo yo")
         while global_step < self.args.total_timesteps:
-            print("yo yo 2")
+            # print("yo yo 2")
 
             if self.args.eval_freq > 0 and (global_step - self.args.training_freq) // self.args.eval_freq < global_step // self.args.eval_freq:
                 # evaluate
