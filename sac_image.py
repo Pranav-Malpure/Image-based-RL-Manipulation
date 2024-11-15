@@ -61,11 +61,11 @@ class Args:
     # Env specific arguments
     env_id: str = "PushCube-v1"
     """the environment id of the task"""
-    num_envs: int = 16
+    num_envs: int = 2
     """the number of parallel environments"""
     num_eval_envs: int = 8
     """the number of parallel evaluation environments"""
-    num_eval_steps: int = 50
+    num_eval_steps: int = 500
     """the number of steps to take in evaluation environments"""
     reconfiguration_freq: Optional[int] = 1
     """for benchmarking purposes we want to reconfigure the eval environment each reset to ensure objects are randomized in some tasks"""
