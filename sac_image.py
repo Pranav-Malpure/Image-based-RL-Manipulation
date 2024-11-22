@@ -408,6 +408,7 @@ class Actor(nn.Module):
 
         # print("obs_shape", obs_shape)
         # print("obs_shape", obs_shape)
+        assert combined_obs_shape == (128,128,4)
         if combined_obs_shape == (128, 128, 4):
             self.cnn = nn.Sequential(
                     nn.Conv2d(
