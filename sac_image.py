@@ -316,7 +316,7 @@ class SoftQNetwork(nn.Module):
         sample_obs, _ = env.reset()
 
         rgb_data = sample_obs['sensor_data']['base_camera']["rgb"].float().permute(0,3,1,2)
-        depth_data = sample_obs['sensor_data']['base_camera']["depth"].float().unsqueeze(1) 
+        depth_data = sample_obs['sensor_data']['base_camera']["depth"].float()
         combined_input = torch.cat((rgb_data, depth_data), dim=1)
 
         with torch.no_grad():
@@ -343,7 +343,7 @@ class SoftQNetwork(nn.Module):
             # if key == "rgb":
             if key == "rgb_depth":
                 obs_rgb = obs.float().permute(0,3,1,2)/255.0
-                obs_depth = obs.unsqueeze(1)/32767.0
+                obs_depth = obs/32767.0
                 obs = torch.cat((obs_rgb,obs_depth), dim=1)
                 # obs = obs / 255
             encoded_tensor_list.append(extractor(obs))
@@ -432,7 +432,7 @@ class Actor(nn.Module):
             )
             sample_obs, _ = env.reset()
             rgb_data = sample_obs['sensor_data']['base_camera']["rgb"].float().permute(0,3,1,2)
-            depth_data = sample_obs['sensor_data']['base_camera']["depth"].float().unsqueeze(1) 
+            depth_data = sample_obs['sensor_data']['base_camera']["depth"].float()
             print("RGB ", rgb_data.shape)
             print("depth ", depth_data.shape)
             combined_input = torch.cat((rgb_data, depth_data), dim=1)
@@ -647,7 +647,7 @@ class SAC(Args):
                 print("Evaluating")
                 eval_obs, _ = self.eval_envs.reset()
                 eval_obs_rgb = eval_obs['sensor_data']['base_camera']['rgb'].float().permute(0,3,1,2)/255.0
-                eval_obs_depth = eval_obs['sensor_data']['base_camera']['depth'].float().unsqueeze(1)/32767.0
+                eval_obs_depth = eval_obs['sensor_data']['base_camera']['depth'].float()/32767.0
                 eval_obs_combined = torch.cat((eval_obs_rgb, eval_obs_depth), dim=1)
                 eval_metrics = defaultdict(list)
                 num_episodes = 0
