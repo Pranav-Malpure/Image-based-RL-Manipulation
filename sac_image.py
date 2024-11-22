@@ -25,7 +25,7 @@ from torch.distributions.normal import Normal
 
 from pathlib import Path
 from efficient_replay_buffer import ReplayBuffer, ReplayBufferStorage, make_replay_loader, replay_iter
-
+from drqv2 import RandomShiftsAug 
 # env_id = "PickCube-v1"
 # obs_mode = "rgb+depth"
 # control_mode = "pd_joint_delta_pos"
@@ -635,6 +635,7 @@ class SAC(Args):
         global_step = 0
         global_update = 0
         learning_has_started = False
+        augment = RandomShiftsAug(pad=4)
 
         global_steps_per_iteration = self.args.num_envs * (self.args.steps_per_env)
         print("hereeeeee ",self.envs.single_observation_space)
@@ -651,6 +652,7 @@ class SAC(Args):
                 counter_eval_episodes += 1
                 eval_obs, _ = self.eval_envs.reset()
                 eval_obs_rgb = eval_obs['sensor_data']['base_camera']['rgb'].float().permute(0,3,1,2)/255.0
+                eval_obs_rgb = augment(eval_obs_rgb)
                 eval_obs_depth = eval_obs['sensor_data']['base_camera']['depth'].float().permute(0,3,1,2)/32767.0
                 eval_obs_combined = torch.cat((eval_obs_rgb, eval_obs_depth), dim=1)
                 eval_metrics = defaultdict(list)
