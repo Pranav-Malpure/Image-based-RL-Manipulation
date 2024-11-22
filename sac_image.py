@@ -154,8 +154,8 @@ class ReplayBuffer:
         self.num_envs = num_envs
         self.storage_device = storage_device
         self.sample_device = sample_device
-        self.obs = torch.zeros((buffer_size, num_envs) + env.single_observation_space['sensor_data']['base_camera']['rgb'].shape).to(storage_device)
-        self.next_obs = torch.zeros((buffer_size, num_envs) + env.single_observation_space['sensor_data']['base_camera']['rgb'].shape).to(storage_device)
+        self.obs = torch.zeros((buffer_size, num_envs) + env.single_observation_space['sensor_data']['base_camera']['rgb'].shape + env.single_observation_space['sensor_data']['base_camera']['depth'].shape).to(storage_device)
+        self.next_obs = torch.zeros((buffer_size, num_envs) + env.single_observation_space['sensor_data']['base_camera']['rgb'].shape + env.single_observation_space['sensor_data']['base_camera']['rgb'].shape).to(storage_device)
         self.actions = torch.zeros((buffer_size, num_envs) + env.single_action_space.shape).to(storage_device)
         self.logprobs = torch.zeros((buffer_size, num_envs)).to(storage_device)
         self.rewards = torch.zeros((buffer_size, num_envs)).to(storage_device)
@@ -268,7 +268,7 @@ class SoftQNetwork(nn.Module):
         extractors = {}
 
         feature_size = 256
-        in_channels=env.single_observation_space['sensor_data']['base_camera']['rgb'].shape[-1]
+        in_channels= env.single_observation_space['sensor_data']['base_camera']['rgb'].shape[-1] + env.single_observation_space['sensor_data']['base_camera']['depth'].shape[-1]
         # cnn = nn.Sequential(
         #     nn.Conv2d(
         #         in_channels=in_channels,
@@ -315,15 +315,21 @@ class SoftQNetwork(nn.Module):
         )
         sample_obs, _ = env.reset()
 
+        rgb_data = sample_obs['sensor_data']['base_camera']["rgb"].float().permute(0,3,1,2)
+        depth_data = sample_obs['sensor_data']['base_camera']["depth"].float().unsqueeze(1) 
+        combined_input = torch.cat((rgb_data, depth_data), dim=1)
+
         with torch.no_grad():
-            n_flatten = cnn(sample_obs['sensor_data']['base_camera']["rgb"].float().permute(0,3,1,2).cpu()).shape[1]
+            # n_flatten = cnn(sample_obs['sensor_data']['base_camera']["rgb"].float().permute(0,3,1,2).cpu()).shape[1]
+            n_flatten = cnn(combined_input.cpu()).shape[1]
             self.fc = nn.Sequential(nn.Linear(n_flatten + np.prod(env.single_action_space.shape), feature_size), nn.ReLU(),
                                nn.Linear(256, 256),
                                 nn.ReLU(),
                                 nn.Linear(256, 256),
                                 nn.ReLU(),
                                 nn.Linear(256, 1))
-        extractors["rgb"] = nn.Sequential(cnn, self.fc)
+        # extractors["rgb"] = nn.Sequential(cnn, self.fc)
+        extractors["rgb_depth"] = nn.Sequential(cnn, self.fc)
         # self.out_features += feature_size
 
         self.extractors = nn.ModuleDict(extractors)
@@ -334,9 +340,12 @@ class SoftQNetwork(nn.Module):
         # self.extractors contain nn.Modules that do all the processing.
         for key, extractor in self.extractors.items():
             obs = observations[key]
-            if key == "rgb":
-                obs = obs.float().permute(0,3,1,2)
-                obs = obs / 255
+            # if key == "rgb":
+            if key == "rgb_depth":
+                obs_rgb = obs.float().permute(0,3,1,2)/255.0
+                obs_depth = obs.unsqueeze(1)/32767.0
+                obs = torch.cat((obs_rgb,obs_depth), dim=1)
+                # obs = obs / 255
             encoded_tensor_list.append(extractor(obs))
 
             encoded_tensor = torch.cat(encoded_tensor_list, dim=1)
@@ -389,13 +398,17 @@ class Actor(nn.Module):
 
 
 
-        obs_space = env.single_observation_space['sensor_data']['base_camera']['rgb']
-        obs_shape = obs_space.shape
-        in_channels=env.single_observation_space['sensor_data']['base_camera']['rgb'].shape[-1]
+        obs_space_rgb = env.single_observation_space['sensor_data']['base_camera']['rgb']
+        obs_space_depth = env.single_observation_space['sensor_data']['base_camera']['depth']
+        obs_rgb_shape = obs_space_rgb.shape
+        obs_depth_shape = obs_space_depth.shape
+        assert obs_rgb_shape[:2] == obs_depth_shape[:2] #should match
+        combined_obs_shape = (obs_rgb_shape[0], obs_rgb_shape[1], obs_rgb_shape[2] + obs_depth_shape[2])
+        in_channels=env.single_observation_space['sensor_data']['base_camera']['rgb'].shape[-1] + env.single_observation_space['sensor_data']['base_camera']['depth'].shape[-1]
 
         # print("obs_shape", obs_shape)
         # print("obs_shape", obs_shape)
-        if obs_shape == (128, 128, 3):
+        if combined_obs_shape == (128, 128, 4):
             self.cnn = nn.Sequential(
                     nn.Conv2d(
                     in_channels=in_channels,
@@ -417,8 +430,12 @@ class Actor(nn.Module):
 
             )
             sample_obs, _ = env.reset()
+            rgb_data = sample_obs['sensor_data']['base_camera']["rgb"].float().permute(0,3,1,2)
+            depth_data = sample_obs['sensor_data']['base_camera']["depth"].float().unsqueeze(1) 
+            combined_input = torch.cat((rgb_data, depth_data), dim=1)
             with torch.no_grad():
-                n_flatten = self.cnn(sample_obs['sensor_data']['base_camera']["rgb"].float().permute(0,3,1,2).cpu()).shape[1]
+                # n_flatten = self.cnn(sample_obs['sensor_data']['base_camera']["rgb"].float().permute(0,3,1,2).cpu()).shape[1]
+                n_flatten = self.cnn(combined_input.cpu()).shape[1]
                 self.backbone = nn.Sequential(nn.Linear(n_flatten, 256), nn.ReLU(),
                                         nn.ReLU(),
                                         nn.Linear(256, 256),
@@ -626,13 +643,15 @@ class SAC(Args):
                 self.actor.eval()
                 print("Evaluating")
                 eval_obs, _ = self.eval_envs.reset()
-                eval_obs_rgb = eval_obs['sensor_data']['base_camera']['rgb'].float()/255.0
+                eval_obs_rgb = eval_obs['sensor_data']['base_camera']['rgb'].float().permute(0,3,1,2)/255.0
+                eval_obs_depth = eval_obs['sensor_data']['base_camera']['depth'].float().unsqueeze(1)/32767.0
+                eval_obs_combined = torch.cat((eval_obs_rgb, eval_obs_depth), dim=1)
                 eval_metrics = defaultdict(list)
                 num_episodes = 0
                 # print("eval obs", eval_obs['sensor_data']['base_camera']['rgb'])
                 for _ in range(self.args.num_eval_steps):
                     with torch.no_grad():
-                        eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = self.eval_envs.step(self.actor.get_eval_action(eval_obs_rgb.permute(0,3,1,2)))
+                        eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = self.eval_envs.step(self.actor.get_eval_action(eval_obs_combined))
                         if "final_info" in eval_infos:
                             mask = eval_infos["_final_info"]
                             num_episodes += mask.sum()
