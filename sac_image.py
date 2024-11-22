@@ -639,6 +639,7 @@ class SAC(Args):
         global_steps_per_iteration = self.args.num_envs * (self.args.steps_per_env)
         print("hereeeeee ",self.envs.single_observation_space)
         # print("yo yo")
+        counter_eval_episodes = 0
         while global_step < self.args.total_timesteps:
             # print("yo yo 2")
 
@@ -646,6 +647,8 @@ class SAC(Args):
                 # evaluate
                 self.actor.eval()
                 print("Evaluating")
+                print("Iteration eval no.: ", counter_eval_episodes)
+                counter_episodes += 1
                 eval_obs, _ = self.eval_envs.reset()
                 eval_obs_rgb = eval_obs['sensor_data']['base_camera']['rgb'].float().permute(0,3,1,2)/255.0
                 eval_obs_depth = eval_obs['sensor_data']['base_camera']['depth'].float().permute(0,3,1,2)/32767.0
