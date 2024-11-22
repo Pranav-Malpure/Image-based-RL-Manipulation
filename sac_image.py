@@ -648,7 +648,7 @@ class SAC(Args):
                 self.actor.eval()
                 print("Evaluating")
                 print("Iteration eval no.: ", counter_eval_episodes)
-                counter_episodes += 1
+                counter_eval_episodes += 1
                 eval_obs, _ = self.eval_envs.reset()
                 eval_obs_rgb = eval_obs['sensor_data']['base_camera']['rgb'].float().permute(0,3,1,2)/255.0
                 eval_obs_depth = eval_obs['sensor_data']['base_camera']['depth'].float().permute(0,3,1,2)/32767.0
