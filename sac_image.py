@@ -723,6 +723,7 @@ class SAC(Args):
             rollout_time = time.time() - rollout_time
 
             # ALGO LOGIC: training.
+            print("Global step: ", global_step)
             if global_step < self.args.learning_starts:
                 continue
 
