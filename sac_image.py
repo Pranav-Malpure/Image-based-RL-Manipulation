@@ -433,8 +433,8 @@ class Actor(nn.Module):
             sample_obs, _ = env.reset()
             rgb_data = sample_obs['sensor_data']['base_camera']["rgb"].float().permute(0,3,1,2)
             depth_data = sample_obs['sensor_data']['base_camera']["depth"].float().unsqueeze(1) 
-            print("RGB ", rgb_data)
-            print("depth ", depth_data)
+            print("RGB ", rgb_data.shape)
+            print("depth ", depth_data.shape)
             combined_input = torch.cat((rgb_data, depth_data), dim=1)
             with torch.no_grad():
                 # n_flatten = self.cnn(sample_obs['sensor_data']['base_camera']["rgb"].float().permute(0,3,1,2).cpu()).shape[1]
