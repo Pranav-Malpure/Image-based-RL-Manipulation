@@ -65,7 +65,7 @@ class Args:
     """the number of parallel environments"""
     num_eval_envs: int = 8
     """the number of parallel evaluation environments"""
-    num_eval_steps: int = 50
+    num_eval_steps: int = 20
     """the number of steps to take in evaluation environments"""
     reconfiguration_freq: Optional[int] = 1
     """for benchmarking purposes we want to reconfigure the eval environment each reset to ensure objects are randomized in some tasks"""
