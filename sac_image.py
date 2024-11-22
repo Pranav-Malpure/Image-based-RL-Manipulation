@@ -330,6 +330,7 @@ class SoftQNetwork(nn.Module):
                                 nn.Linear(256, 1))
         # extractors["rgb"] = nn.Sequential(cnn, self.fc)
         extractors["rgb_depth"] = nn.Sequential(cnn, self.fc)
+        print("EXTRACTORS", extractors)
         # self.out_features += feature_size
 
         self.extractors = nn.ModuleDict(extractors)
