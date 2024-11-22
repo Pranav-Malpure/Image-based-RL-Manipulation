@@ -90,7 +90,7 @@ class Args:
     batch_size: int = 1024
     """the batch size of sample from the replay memory"""
     # learning_starts: int = 4_000
-    learning_starts: int = 2
+    learning_starts: int = 25
     """timestep to start learning"""
     policy_lr: float = 3e-4
     """the learning rate of the policy network optimizer"""
@@ -117,7 +117,7 @@ class Args:
     nstep: int = 1 # TODO: have to verify this
     """the n-step return"""
     # to be filled in runtime
-    grad_steps_per_iteration: int = 0
+    grad_steps_per_iteration: int = 1
     """the number of gradient updates per iteration"""
     steps_per_env: int = 1
     """the number of steps each parallel env takes per iteration"""
