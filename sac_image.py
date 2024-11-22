@@ -119,7 +119,7 @@ class Args:
     # to be filled in runtime
     grad_steps_per_iteration: int = 0
     """the number of gradient updates per iteration"""
-    steps_per_env: int = 0
+    steps_per_env: int = 1
     """the number of steps each parallel env takes per iteration"""
 
 
