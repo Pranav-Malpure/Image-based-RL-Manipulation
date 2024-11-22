@@ -61,7 +61,7 @@ class Args:
     # Env specific arguments
     env_id: str = "PushCube-v1"
     """the environment id of the task"""
-    num_envs: int = 2
+    num_envs: int = 32
     """the number of parallel environments"""
     num_eval_envs: int = 8
     """the number of parallel evaluation environments"""
@@ -71,7 +71,7 @@ class Args:
     """for benchmarking purposes we want to reconfigure the eval environment each reset to ensure objects are randomized in some tasks"""
     log_freq: int = 1_000
     """logging frequency in terms of environment steps"""
-    eval_freq: int = 100_000
+    eval_freq: int = 50_000
     """evaluation frequency in terms of environment steps"""
     save_train_video_freq: Optional[int] = None
     """frequency to save training videos in terms of environment steps"""
@@ -616,7 +616,7 @@ class SAC(Args):
         learning_has_started = False
 
         global_steps_per_iteration = self.args.num_envs * (self.args.steps_per_env)
-
+        print("hereeeeee ",self.envs.single_observation_space)
         # print("yo yo")
         while global_step < self.args.total_timesteps:
             # print("yo yo 2")
