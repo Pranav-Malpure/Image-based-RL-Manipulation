@@ -65,7 +65,7 @@ class Args:
     """the number of parallel environments"""
     num_eval_envs: int = 8
     """the number of parallel evaluation environments"""
-    num_eval_steps: int = 20
+    num_eval_steps: int = 50
     """the number of steps to take in evaluation environments"""
     reconfiguration_freq: Optional[int] = 1
     """for benchmarking purposes we want to reconfigure the eval environment each reset to ensure objects are randomized in some tasks"""
@@ -77,7 +77,7 @@ class Args:
     """frequency to save training videos in terms of environment steps"""
 
     # Algorithm specific arguments
-    total_timesteps: int = 10_000_000
+    total_timesteps: int = 100_000_000
     """total timesteps of the experiments"""
     buffer_size: int = 1_000_000
     """the replay memory buffer size"""
