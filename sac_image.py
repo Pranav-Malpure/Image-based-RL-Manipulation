@@ -316,7 +316,7 @@ class SoftQNetwork(nn.Module):
         sample_obs, _ = env.reset()
 
         rgb_data = sample_obs['sensor_data']['base_camera']["rgb"].float().permute(0,3,1,2)
-        depth_data = sample_obs['sensor_data']['base_camera']["depth"].float()
+        depth_data = sample_obs['sensor_data']['base_camera']["depth"].float().permute(0,3,1,2)
         combined_input = torch.cat((rgb_data, depth_data), dim=1)
 
         with torch.no_grad():
