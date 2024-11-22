@@ -71,13 +71,13 @@ class Args:
     """for benchmarking purposes we want to reconfigure the eval environment each reset to ensure objects are randomized in some tasks"""
     log_freq: int = 1_000
     """logging frequency in terms of environment steps"""
-    eval_freq: int = 50_000
+    eval_freq: int = 25
     """evaluation frequency in terms of environment steps"""
     save_train_video_freq: Optional[int] = None
     """frequency to save training videos in terms of environment steps"""
 
     # Algorithm specific arguments
-    total_timesteps: int = 1_000_000
+    total_timesteps: int = 10_000_000
     """total timesteps of the experiments"""
     buffer_size: int = 1_000_000
     """the replay memory buffer size"""
