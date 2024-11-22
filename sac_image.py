@@ -90,7 +90,7 @@ class Args:
     batch_size: int = 1024
     """the batch size of sample from the replay memory"""
     # learning_starts: int = 4_000
-    learning_starts: int = 40
+    learning_starts: int = 2
     """timestep to start learning"""
     policy_lr: float = 3e-4
     """the learning rate of the policy network optimizer"""
@@ -745,10 +745,12 @@ class SAC(Args):
                     min_qf_next_target = torch.min(qf1_next_target, qf2_next_target) - self.alpha * next_state_log_pi
                     next_q_value = data.rewards.flatten() + (1 - data.dones.flatten()) * self.args.gamma * (min_qf_next_target).view(-1)
                     # data.dones is "stop_bootstrap", which is computed earlier according to self.args.bootstrap_at_done
-
+                print("line 748")
                 qf1_a_values = self.qf1(data.obs, data.actions).view(-1)
+                print("line 750")
                 qf2_a_values = self.qf2(data.obs, data.actions).view(-1)
                 qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
+                print("line 753")
                 qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
                 qf_loss = qf1_loss + qf2_loss
 
