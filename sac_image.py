@@ -702,7 +702,8 @@ class SAC(Args):
 
                 # TRY NOT TO MODIFY: execute the game and log data.
                 next_obs, rewards, terminations, truncations, infos = self.envs.step(actions)
-                real_next_obs = next_obs.clone()
+                # real_next_obs = next_obs.clone()
+                real_next_obs = next_obs.copy()
                 if self.args.bootstrap_at_done == 'always':
                     next_done = torch.zeros_like(terminations).to(torch.float32)
                 else:
