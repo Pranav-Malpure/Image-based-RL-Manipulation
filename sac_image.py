@@ -691,6 +691,7 @@ class SAC(Args):
             rollout_time = time.time()
             for local_step in range(self.args.steps_per_env):
                 global_step += 1 * self.args.num_envs
+                print("global step increasing?? ", global_step)
 
                 # ALGO LOGIC: put action logic here
                 if not learning_has_started:
