@@ -117,9 +117,9 @@ class Args:
     nstep: int = 1 # TODO: have to verify this
     """the n-step return"""
     # to be filled in runtime
-    grad_steps_per_iteration: int = 1
+    grad_steps_per_iteration: int = 0
     """the number of gradient updates per iteration"""
-    steps_per_env: int = 1
+    steps_per_env: int = 0
     """the number of steps each parallel env takes per iteration"""
 
 
