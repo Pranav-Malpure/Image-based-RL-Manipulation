@@ -89,8 +89,8 @@ class Args:
     """target smoothing coefficient (default: 0.005)"""
     batch_size: int = 1024
     """the batch size of sample from the replay memory"""
-    # learning_starts: int = 4_000
-    learning_starts: int = 2500
+    learning_starts: int = 4_000
+    # learning_starts: int = 2500
     """timestep to start learning"""
     policy_lr: float = 3e-4
     """the learning rate of the policy network optimizer"""
