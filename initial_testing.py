@@ -31,7 +31,7 @@ obs_mode = "rgb+depth"
 control_mode = "pd_joint_delta_pos"
 reward_mode = "sparse"
 robot_uids = "panda"
-num_envs = 1
+num_envs = 32
 num_eval_envs = 1
 
 
