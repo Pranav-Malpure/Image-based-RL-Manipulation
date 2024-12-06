@@ -398,6 +398,8 @@ class SoftQNetwork(nn.Module):
         if detach_encoder:
             visual_feature = visual_feature.detach()
         x = torch.cat([visual_feature, obs["state"], action], dim=1)
+        if x is None:
+            print("here is the error")
         h = self.trunk(x)
         return self.mlp(h)
 
