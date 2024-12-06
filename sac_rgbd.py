@@ -385,7 +385,10 @@ class SoftQNetwork(nn.Module):
         self.encoder = encoder
         action_dim = np.prod(envs.single_action_space.shape)
         state_dim = envs.single_observation_space['state'].shape[0]
-        self.mlp = make_mlp(encoder.encoder.out_dim+action_dim+state_dim, [512, 256, 1], last_act=False)
+
+        self.trunk = nn.Sequential(nn.Linear(self.encoder.encoder.out_dim +state_dim, 512), nn.LayerNorm(512), nn.Tanh()) # TODO: have to check this 512
+        self.mlp = make_mlp(512, [512, 256], last_act=True)  #TODO check this for 512 input
+        # self.mlp = make_mlp(encoder.encoder.out_dim+action_dim+state_dim, [512, 256, 1], last_act=False)
 
     def forward(self, obs, action, visual_feature=None, detach_encoder=False):
         if visual_feature is None:
@@ -393,7 +396,8 @@ class SoftQNetwork(nn.Module):
         if detach_encoder:
             visual_feature = visual_feature.detach()
         x = torch.cat([visual_feature, obs["state"], action], dim=1)
-        return self.mlp(x)
+        h = self.trunk(x)
+        return self.mlp(h)
 
 
 LOG_STD_MAX = 2
@@ -416,7 +420,10 @@ class Actor(nn.Module):
         self.encoder = EncoderObsWrapper(
             PlainConv(in_channels=in_channels, out_dim=256, image_size=image_size) # assume image is 64x64
         )
-        self.mlp = make_mlp(self.encoder.encoder.out_dim+state_dim, [512, 256], last_act=True)
+
+        self.trunk = nn.Sequential(nn.Linear(self.encoder.encoder.out_dim +state_dim, 512), nn.LayerNorm(512), nn.Tanh()) # TODO: have to check this 512
+
+        self.mlp = make_mlp(512, [512, 256], last_act=True)
         self.fc_mean = nn.Linear(256, action_dim)
         self.fc_logstd = nn.Linear(256, action_dim)
         # action rescaling
@@ -428,7 +435,8 @@ class Actor(nn.Module):
         if detach_encoder:
             visual_feature = visual_feature.detach()
         x = torch.cat([visual_feature, obs['state']], dim=1)
-        return self.mlp(x), visual_feature
+        h = self.trunk(x)
+        return self.mlp(h), visual_feature
 
     def forward(self, obs, detach_encoder=False):
         x, visual_feature = self.get_feature(obs, detach_encoder)
