@@ -429,7 +429,8 @@ class Actor(nn.Module):
 
         self.trunk = nn.Sequential(nn.Linear(self.encoder.encoder.out_dim +state_dim, 512), nn.LayerNorm(512), nn.Tanh()) # TODO: have to check this 512
 
-        self.mlp = make_mlp(512, [512, 256], last_act=True)
+        self.mlp = nn.Sequential(*make_mlp(512, [512, 256], last_act=True))
+        # self.mlp = make_mlp(512, [512, 256], last_act=True)
         self.fc_mean = nn.Linear(256, action_dim)
         self.fc_logstd = nn.Linear(256, action_dim)
         # action rescaling
@@ -582,23 +583,23 @@ if __name__ == "__main__":
     eval_obs, _ = eval_envs.reset(seed=args.seed)
 
     # architecture is all actor, q-networks share the same vision encoder. Output of encoder is concatenates with any state data followed by separate MLPs.
-    # actor = Actor(envs, sample_obs=obs).to(device)
-    # qf1 = SoftQNetwork(envs, actor.encoder).to(device)
-    # qf2 = SoftQNetwork(envs, actor.encoder).to(device)
-    # qf1_target = SoftQNetwork(envs, actor.encoder).to(device)
-    # qf2_target = SoftQNetwork(envs, actor.encoder).to(device)
+    actor = Actor(envs, sample_obs=obs).to(device)
+    qf1 = SoftQNetwork(envs, actor.encoder).to(device)
+    qf2 = SoftQNetwork(envs, actor.encoder).to(device)
+    qf1_target = SoftQNetwork(envs, actor.encoder).to(device)
+    qf2_target = SoftQNetwork(envs, actor.encoder).to(device)
 
-    actor = Actor(envs, sample_obs=obs)
-    qf1 = SoftQNetwork(envs, actor.encoder)
-    qf2 = SoftQNetwork(envs, actor.encoder)
-    qf1_target = SoftQNetwork(envs, actor.encoder)
-    qf2_target = SoftQNetwork(envs, actor.encoder)
+    # actor = Actor(envs, sample_obs=obs)
+    # qf1 = SoftQNetwork(envs, actor.encoder)
+    # qf2 = SoftQNetwork(envs, actor.encoder)
+    # qf1_target = SoftQNetwork(envs, actor.encoder)
+    # qf2_target = SoftQNetwork(envs, actor.encoder)
 
-    actor = nn.DataParallel(actor)
-    qf1 = nn.DataParallel(qf1)
-    qf2 = nn.DataParallel(qf2)
-    qf1_target = nn.DataParallel(qf1_target)
-    qf2_target = nn.DataParallel(qf2_target)
+    # actor = nn.DataParallel(actor)
+    # qf1 = nn.DataParallel(qf1)
+    # qf2 = nn.DataParallel(qf2)
+    # qf1_target = nn.DataParallel(qf1_target)
+    # qf2_target = nn.DataParallel(qf2_target)
 
 
     if args.checkpoint is not None:
