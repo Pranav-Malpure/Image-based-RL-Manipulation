@@ -582,11 +582,17 @@ if __name__ == "__main__":
     eval_obs, _ = eval_envs.reset(seed=args.seed)
 
     # architecture is all actor, q-networks share the same vision encoder. Output of encoder is concatenates with any state data followed by separate MLPs.
-    actor = Actor(envs, sample_obs=obs).to(device)
-    qf1 = SoftQNetwork(envs, actor.encoder).to(device)
-    qf2 = SoftQNetwork(envs, actor.encoder).to(device)
-    qf1_target = SoftQNetwork(envs, actor.encoder).to(device)
-    qf2_target = SoftQNetwork(envs, actor.encoder).to(device)
+    # actor = Actor(envs, sample_obs=obs).to(device)
+    # qf1 = SoftQNetwork(envs, actor.encoder).to(device)
+    # qf2 = SoftQNetwork(envs, actor.encoder).to(device)
+    # qf1_target = SoftQNetwork(envs, actor.encoder).to(device)
+    # qf2_target = SoftQNetwork(envs, actor.encoder).to(device)
+
+    actor = Actor(envs, sample_obs=obs)
+    qf1 = SoftQNetwork(envs, actor.encoder)
+    qf2 = SoftQNetwork(envs, actor.encoder)
+    qf1_target = SoftQNetwork(envs, actor.encoder)
+    qf2_target = SoftQNetwork(envs, actor.encoder)
 
     actor = nn.DataParallel(actor)
     qf1 = nn.DataParallel(qf1)
