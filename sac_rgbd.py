@@ -386,7 +386,7 @@ class SoftQNetwork(nn.Module):
         action_dim = np.prod(envs.single_action_space.shape)
         state_dim = envs.single_observation_space['state'].shape[0]
 
-        self.trunk = nn.Sequential(nn.Linear(self.encoder.encoder.out_dim*action_dim + state_dim, 512), nn.LayerNorm(512), nn.Tanh()) # TODO: have to check this 512
+        self.trunk = nn.Sequential(nn.Linear(self.encoder.encoder.out_dim+action_dim + state_dim, 512), nn.LayerNorm(512), nn.Tanh()) # TODO: have to check this 512
         self.mlp = make_mlp(512, [512, 256, 1], last_act=False)  #TODO check this for 512 input
         # self.mlp = make_mlp(encoder.encoder.out_dim+action_dim+state_dim, [512, 256, 1], last_act=False)
 
@@ -398,8 +398,10 @@ class SoftQNetwork(nn.Module):
         if detach_encoder:
             visual_feature = visual_feature.detach()
         x = torch.cat([visual_feature, obs["state"], action], dim=1)
-        if x is None:
-            print("here is the error")
+        # print("visual_feature shape:", visual_feature.shape if visual_feature is not None else None)
+        # print("obs['state'] shape:", obs["state"].shape if "state" in obs else None)
+        # print("action shape:", action.shape if action is not None else None)
+        # print("x shape:", x.shape)
         h = self.trunk(x)
         return self.mlp(h)
 
