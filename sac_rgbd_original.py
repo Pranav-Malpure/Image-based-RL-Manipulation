@@ -135,7 +135,6 @@ class Args:
     """the number of gradient updates per iteration"""
     steps_per_env: int = 0
     """the number of steps each parallel env takes per iteration"""
-
 class DictArray(object):
     def __init__(self, buffer_shape, element_space, data_dict=None, device=None):
         self.buffer_shape = buffer_shape
@@ -385,21 +384,15 @@ class SoftQNetwork(nn.Module):
         self.encoder = encoder
         action_dim = np.prod(envs.single_action_space.shape)
         state_dim = envs.single_observation_space['state'].shape[0]
-
-        self.trunk = nn.Sequential(nn.Linear(self.encoder.encoder.out_dim+action_dim + state_dim, 512), nn.LayerNorm(512), nn.Tanh()) # TODO: have to check this 512
-        self.mlp = make_mlp(512, [512, 256, 1], last_act=False)  #TODO check this for 512 input
-        # self.mlp = make_mlp(encoder.encoder.out_dim+action_dim+state_dim, [512, 256, 1], last_act=False)
+        self.mlp = make_mlp(encoder.encoder.out_dim+action_dim+state_dim, [512, 256, 1], last_act=False)
 
     def forward(self, obs, action, visual_feature=None, detach_encoder=False):
-        if obs is None:
-            print("here is the mistake")
         if visual_feature is None:
             visual_feature = self.encoder(obs)
         if detach_encoder:
             visual_feature = visual_feature.detach()
         x = torch.cat([visual_feature, obs["state"], action], dim=1)
-        h = self.trunk(x)
-        return self.mlp(h)
+        return self.mlp(x)
 
 
 LOG_STD_MAX = 2
@@ -422,11 +415,7 @@ class Actor(nn.Module):
         self.encoder = EncoderObsWrapper(
             PlainConv(in_channels=in_channels, out_dim=256, image_size=image_size) # assume image is 64x64
         )
-
-        self.trunk = nn.Sequential(nn.Linear(self.encoder.encoder.out_dim +state_dim, 512), nn.LayerNorm(512), nn.Tanh()) # TODO: have to check this 512
-
-        self.mlp = nn.Sequential(*make_mlp(512, [512, 256], last_act=True))
-        # self.mlp = make_mlp(512, [512, 256], last_act=True)
+        self.mlp = make_mlp(self.encoder.encoder.out_dim+state_dim, [512, 256], last_act=True)
         self.fc_mean = nn.Linear(256, action_dim)
         self.fc_logstd = nn.Linear(256, action_dim)
         # action rescaling
@@ -438,8 +427,7 @@ class Actor(nn.Module):
         if detach_encoder:
             visual_feature = visual_feature.detach()
         x = torch.cat([visual_feature, obs['state']], dim=1)
-        h = self.trunk(x)
-        return self.mlp(h), visual_feature
+        return self.mlp(x), visual_feature
 
     def forward(self, obs, detach_encoder=False):
         x, visual_feature = self.get_feature(obs, detach_encoder)
@@ -486,7 +474,6 @@ class Logger:
         self.writer.close()
 
 if __name__ == "__main__":
-    
     args = tyro.cli(Args)
     args.grad_steps_per_iteration = int(args.training_freq * args.utd)
     args.steps_per_env = args.training_freq // args.num_envs
@@ -584,20 +571,6 @@ if __name__ == "__main__":
     qf2 = SoftQNetwork(envs, actor.encoder).to(device)
     qf1_target = SoftQNetwork(envs, actor.encoder).to(device)
     qf2_target = SoftQNetwork(envs, actor.encoder).to(device)
-
-    # actor = Actor(envs, sample_obs=obs)
-    # qf1 = SoftQNetwork(envs, actor.encoder)
-    # qf2 = SoftQNetwork(envs, actor.encoder)
-    # qf1_target = SoftQNetwork(envs, actor.encoder)
-    # qf2_target = SoftQNetwork(envs, actor.encoder)
-
-    # actor = nn.DataParallel(actor)
-    # qf1 = nn.DataParallel(qf1)
-    # qf2 = nn.DataParallel(qf2)
-    # qf1_target = nn.DataParallel(qf1_target)
-    # qf2_target = nn.DataParallel(qf2_target)
-
-
     if args.checkpoint is not None:
         ckpt = torch.load(args.checkpoint)
         actor.load_state_dict(ckpt['actor'])
