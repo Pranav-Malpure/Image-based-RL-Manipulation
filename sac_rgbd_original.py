@@ -576,44 +576,44 @@ if __name__ == "__main__":
     obs, info = envs.reset(seed=args.seed) # in Gymnasium, seed is given to reset() instead of seed()
     eval_obs, _ = eval_envs.reset(seed=args.seed)
 
-    obs = obs.to(device)
-    eval_obs = eval_obs.to(device)
+    # obs = obs.to(device)
+    # eval_obs = eval_obs.to(device)
     # architecture is all actor, q-networks share the same vision encoder. Output of encoder is concatenates with any state data followed by separate MLPs.
-    # actor = Actor(envs, sample_obs=obs).to(device)
-    # qf1 = SoftQNetwork(envs, actor.encoder).to(device)
-    # qf2 = SoftQNetwork(envs, actor.encoder).to(device)
-    # qf1_target = SoftQNetwork(envs, actor.encoder).to(device)
-    # qf2_target = SoftQNetwork(envs, actor.encoder).to(device)
+    actor = Actor(envs, sample_obs=obs).to(device)
+    qf1 = SoftQNetwork(envs, actor.encoder).to(device)
+    qf2 = SoftQNetwork(envs, actor.encoder).to(device)
+    qf1_target = SoftQNetwork(envs, actor.encoder).to(device)
+    qf2_target = SoftQNetwork(envs, actor.encoder).to(device)
 
-    actor = nn.DataParallel(Actor(envs, sample_obs=obs)).to(device)
-    qf1 = nn.DataParallel(SoftQNetwork(envs, actor.module.encoder)).to(device)
-    qf2 = nn.DataParallel(SoftQNetwork(envs, actor.module.encoder)).to(device)
-    qf1_target = nn.DataParallel(SoftQNetwork(envs, actor.module.encoder)).to(device)
-    qf2_target = nn.DataParallel(SoftQNetwork(envs, actor.module.encoder)).to(device)
+    # actor = nn.DataParallel(Actor(envs, sample_obs=obs)).to(device)
+    # qf1 = nn.DataParallel(SoftQNetwork(envs, actor.module.encoder)).to(device)
+    # qf2 = nn.DataParallel(SoftQNetwork(envs, actor.module.encoder)).to(device)
+    # qf1_target = nn.DataParallel(SoftQNetwork(envs, actor.module.encoder)).to(device)
+    # qf2_target = nn.DataParallel(SoftQNetwork(envs, actor.module.encoder)).to(device)
     if args.checkpoint is not None:
-        # ckpt = torch.load(args.checkpoint)
-        # actor.load_state_dict(ckpt['actor'])
-        # qf1.load_state_dict(ckpt['qf1'])
-        # qf2.load_state_dict(ckpt['qf2'])
-        # Loading
         ckpt = torch.load(args.checkpoint)
-        actor.module.load_state_dict(ckpt['actor'])
-        qf1.module.load_state_dict(ckpt['qf1'])
-        qf2.module.load_state_dict(ckpt['qf2'])
+        actor.load_state_dict(ckpt['actor'])
+        qf1.load_state_dict(ckpt['qf1'])
+        qf2.load_state_dict(ckpt['qf2'])
+        # Loading
+        # ckpt = torch.load(args.checkpoint)
+        # actor.module.load_state_dict(ckpt['actor'])
+        # qf1.module.load_state_dict(ckpt['qf1'])
+        # qf2.module.load_state_dict(ckpt['qf2'])
 
     qf1_target.load_state_dict(qf1.state_dict())
     qf2_target.load_state_dict(qf2.state_dict())
-    # q_optimizer = optim.Adam(
-    #     list(qf1.mlp.parameters()) +
-    #     list(qf2.mlp.parameters()) +
-    #     list(qf1.encoder.parameters()),
-    #     lr=args.q_lr)
-    # actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
     q_optimizer = optim.Adam(
-        list(qf1.module.mlp.parameters()) + list(qf2.module.mlp.parameters()) + list(qf1.module.encoder.parameters()),
-        lr=args.q_lr
-        )
-    actor_optimizer = optim.Adam(list(actor.module.parameters()), lr=args.policy_lr)
+        list(qf1.mlp.parameters()) +
+        list(qf2.mlp.parameters()) +
+        list(qf1.encoder.parameters()),
+        lr=args.q_lr)
+    actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
+    # q_optimizer = optim.Adam(
+    #     list(qf1.module.mlp.parameters()) + list(qf2.module.mlp.parameters()) + list(qf1.module.encoder.parameters()),
+    #     lr=args.q_lr
+    #     )
+    # actor_optimizer = optim.Adam(list(actor.module.parameters()), lr=args.policy_lr)
     # Automatic entropy tuning
     if args.autotune:
         target_entropy = -torch.prod(torch.Tensor(envs.single_action_space.shape).to(device)).item()
@@ -641,7 +641,7 @@ if __name__ == "__main__":
             num_episodes = 0
             for _ in range(args.num_eval_steps):
                 with torch.no_grad():
-                    eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = eval_envs.step(actor.module.get_eval_action(eval_obs))
+                    eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = eval_envs.step(actor.get_eval_action(eval_obs))
                     if "final_info" in eval_infos:
                         mask = eval_infos["_final_info"]
                         num_episodes += mask.sum()
