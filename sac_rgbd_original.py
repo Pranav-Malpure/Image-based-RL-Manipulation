@@ -667,19 +667,19 @@ if __name__ == "__main__":
 
             if args.save_model:
                 model_path = f"runs/{run_name}/ckpt_{global_step}.pt"
-                # torch.save({
-                #     'actor': actor.state_dict(),
-                #     'qf1': qf1_target.state_dict(),
-                #     'qf2': qf2_target.state_dict(),
-                #     'log_alpha': log_alpha,
-                # }, model_path)
-
                 torch.save({
-                'actor': actor.module.state_dict(),
-                'qf1': qf1.module.state_dict(),
-                'qf2': qf2.module.state_dict(),
-                'log_alpha': log_alpha,
+                    'actor': actor.state_dict(),
+                    'qf1': qf1_target.state_dict(),
+                    'qf2': qf2_target.state_dict(),
+                    'log_alpha': log_alpha,
                 }, model_path)
+
+                # torch.save({
+                # 'actor': actor.module.state_dict(),
+                # 'qf1': qf1.module.state_dict(),
+                # 'qf2': qf2.module.state_dict(),
+                # 'log_alpha': log_alpha,
+                # }, model_path)
                 print(f"model saved to {model_path}")
 
         # Collect samples from environemnts
