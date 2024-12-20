@@ -491,9 +491,9 @@ if __name__ == "__main__":
         run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
     else:
         run_name = args.exp_name
-    args.num_envs = args.num_envs * torch.cuda.device_count()
-    args.num_eval_envs = args.num_eval_envs * torch.cuda.device_count()
-    args.batch_size *= torch.cuda.device_count()
+    # args.num_envs = args.num_envs * torch.cuda.device_count()
+    # args.num_eval_envs = args.num_eval_envs * torch.cuda.device_count()
+    # args.batch_size *= torch.cuda.device_count()
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
