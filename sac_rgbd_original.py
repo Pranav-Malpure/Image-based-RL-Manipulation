@@ -477,6 +477,8 @@ if __name__ == "__main__":
     os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"  # Use GPUs 0 and 1
     # Set random seed for reproducibility
     # device =range(torch.cuda.device_count())
+    torch.cuda.manual_seed_all(42)
+    devices = range(torch.cuda.device_count())
     for i in range(torch.cuda.device_count()):
         torch.cuda.set_device(i)  # Switch to the device
         torch.randn(1).cuda() 
@@ -497,7 +499,6 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-
     ####### Environment setup #######
     env_kwargs = dict(obs_mode=args.obs_mode, render_mode=args.render_mode, sim_backend="gpu", sensor_configs=dict())
     if args.control_mode is not None:
