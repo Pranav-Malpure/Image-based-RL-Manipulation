@@ -476,10 +476,11 @@ class Logger:
 if __name__ == "__main__":
     os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"  # Use GPUs 0 and 1
     # Set random seed for reproducibility
-    seed = 42
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed) 
-    
+    # device =range(torch.cuda.device_count())
+    for i in range(torch.cuda.device_count()):
+        torch.cuda.set_device(i)  # Switch to the device
+        torch.randn(1).cuda() 
+
     args = tyro.cli(Args)
     args.grad_steps_per_iteration = int(args.training_freq * args.utd)
     args.steps_per_env = args.training_freq // args.num_envs
