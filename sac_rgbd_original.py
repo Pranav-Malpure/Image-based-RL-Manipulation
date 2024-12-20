@@ -65,9 +65,9 @@ class Args:
     """whether to include the state in the observation"""
     env_vectorization: str = "gpu"
     """the type of environment vectorization to use"""
-    num_envs: int = 16
+    num_envs: int = 8
     """the number of parallel environments"""
-    num_eval_envs: int = 16
+    num_eval_envs: int = 8
     """the number of parallel evaluation environments"""
     partial_reset: bool = False
     """whether to let parallel environments reset upon termination instead of truncation"""
@@ -598,7 +598,7 @@ if __name__ == "__main__":
         actor.module.load_state_dict(ckpt['actor'])
         qf1.module.load_state_dict(ckpt['qf1'])
         qf2.module.load_state_dict(ckpt['qf2'])
-        
+
     qf1_target.load_state_dict(qf1.state_dict())
     qf2_target.load_state_dict(qf2.state_dict())
     # q_optimizer = optim.Adam(
