@@ -491,6 +491,9 @@ if __name__ == "__main__":
         run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
     else:
         run_name = args.exp_name
+    args.num_envs = args.num_envs * torch.cuda.device_count()
+    args.num_eval_envs = args.num_eval_envs * torch.cuda.device_count()
+    args.batch_size *= torch.cuda.device_count()
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
@@ -574,25 +577,41 @@ if __name__ == "__main__":
     eval_obs, _ = eval_envs.reset(seed=args.seed)
 
     # architecture is all actor, q-networks share the same vision encoder. Output of encoder is concatenates with any state data followed by separate MLPs.
-    actor = Actor(envs, sample_obs=obs).to(device)
-    qf1 = SoftQNetwork(envs, actor.encoder).to(device)
-    qf2 = SoftQNetwork(envs, actor.encoder).to(device)
-    qf1_target = SoftQNetwork(envs, actor.encoder).to(device)
-    qf2_target = SoftQNetwork(envs, actor.encoder).to(device)
+    # actor = Actor(envs, sample_obs=obs).to(device)
+    # qf1 = SoftQNetwork(envs, actor.encoder).to(device)
+    # qf2 = SoftQNetwork(envs, actor.encoder).to(device)
+    # qf1_target = SoftQNetwork(envs, actor.encoder).to(device)
+    # qf2_target = SoftQNetwork(envs, actor.encoder).to(device)
+
+    actor = nn.DataParallel(Actor(envs, sample_obs=obs)).to(device)
+    qf1 = nn.DataParallel(SoftQNetwork(envs, actor.module.encoder)).to(device)
+    qf2 = nn.DataParallel(SoftQNetwork(envs, actor.module.encoder)).to(device)
+    qf1_target = nn.DataParallel(SoftQNetwork(envs, actor.module.encoder)).to(device)
+    qf2_target = nn.DataParallel(SoftQNetwork(envs, actor.module.encoder)).to(device)
     if args.checkpoint is not None:
+        # ckpt = torch.load(args.checkpoint)
+        # actor.load_state_dict(ckpt['actor'])
+        # qf1.load_state_dict(ckpt['qf1'])
+        # qf2.load_state_dict(ckpt['qf2'])
+        # Loading
         ckpt = torch.load(args.checkpoint)
-        actor.load_state_dict(ckpt['actor'])
-        qf1.load_state_dict(ckpt['qf1'])
-        qf2.load_state_dict(ckpt['qf2'])
+        actor.module.load_state_dict(ckpt['actor'])
+        qf1.module.load_state_dict(ckpt['qf1'])
+        qf2.module.load_state_dict(ckpt['qf2'])
+        
     qf1_target.load_state_dict(qf1.state_dict())
     qf2_target.load_state_dict(qf2.state_dict())
+    # q_optimizer = optim.Adam(
+    #     list(qf1.mlp.parameters()) +
+    #     list(qf2.mlp.parameters()) +
+    #     list(qf1.encoder.parameters()),
+    #     lr=args.q_lr)
+    # actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
     q_optimizer = optim.Adam(
-        list(qf1.mlp.parameters()) +
-        list(qf2.mlp.parameters()) +
-        list(qf1.encoder.parameters()),
-        lr=args.q_lr)
-    actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
-
+        list(qf1.module.mlp.parameters()) + list(qf2.module.mlp.parameters()) + list(qf1.module.encoder.parameters()),
+        lr=args.q_lr
+        )
+    actor_optimizer = optim.Adam(list(actor.module.parameters()), lr=args.policy_lr)
     # Automatic entropy tuning
     if args.autotune:
         target_entropy = -torch.prod(torch.Tensor(envs.single_action_space.shape).to(device)).item()
@@ -646,11 +665,18 @@ if __name__ == "__main__":
 
             if args.save_model:
                 model_path = f"runs/{run_name}/ckpt_{global_step}.pt"
+                # torch.save({
+                #     'actor': actor.state_dict(),
+                #     'qf1': qf1_target.state_dict(),
+                #     'qf2': qf2_target.state_dict(),
+                #     'log_alpha': log_alpha,
+                # }, model_path)
+
                 torch.save({
-                    'actor': actor.state_dict(),
-                    'qf1': qf1_target.state_dict(),
-                    'qf2': qf2_target.state_dict(),
-                    'log_alpha': log_alpha,
+                'actor': actor.module.state_dict(),
+                'qf1': qf1.module.state_dict(),
+                'qf2': qf2.module.state_dict(),
+                'log_alpha': log_alpha,
                 }, model_path)
                 print(f"model saved to {model_path}")
 
@@ -698,6 +724,7 @@ if __name__ == "__main__":
         # ALGO LOGIC: training.
         if global_step < args.learning_starts:
             continue
+
 
         update_time = time.perf_counter()
         learning_has_started = True
