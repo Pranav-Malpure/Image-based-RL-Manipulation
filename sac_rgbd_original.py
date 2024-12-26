@@ -813,15 +813,15 @@ if __name__ == "__main__":
 
     print("Yo")
     import pickle
-    plt.figure(1)
-    plt.plot(plot_success_once)
-    plt.show()
+    # plt.figure(1)
+    # plt.plot(plot_success_once)
+    # plt.show()
     with open('plot_success_once.pickle', 'wb') as file:
         pickle.dump(plot_success_once, file)
 
-    plt.figure(2)
-    plt.plot(plot_return)
-    plt.show()
+    # plt.figure(2)
+    # plt.plot(plot_return)
+    # plt.show()
     with open('plot_success_once.pickle', 'wb') as file:
         pickle.dump(plot_return, file)
 
