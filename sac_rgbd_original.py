@@ -23,6 +23,7 @@ from torch.utils.tensorboard import SummaryWriter
 import tyro
 
 import mani_skill.envs
+import matplotlib.pyplot as plt
 
 
 @dataclass
@@ -482,7 +483,8 @@ if __name__ == "__main__":
     # for i in range(torch.cuda.device_count()):
     #     torch.cuda.set_device(i)  # Switch to the device
     #     torch.randn(1).cuda() 
-
+    plot_return = []
+    plot_success_once = []
     args = tyro.cli(Args)
     args.grad_steps_per_iteration = int(args.training_freq * args.utd)
     args.steps_per_env = args.training_freq // args.num_envs
@@ -657,6 +659,9 @@ if __name__ == "__main__":
                 f"success_once: {eval_metrics_mean['success_once']:.2f}, "
                 f"return: {eval_metrics_mean['return']:.2f}"
             )
+            plot_success_once.append(eval_metrics_mean['success_once'])
+            plot_return.append(eval_metrics_mean['return'])
+
             if logger is not None:
                 eval_time = time.perf_counter() - stime
                 cumulative_times["eval_time"] += eval_time
@@ -805,6 +810,15 @@ if __name__ == "__main__":
             logger.add_scalar("time/total_rollout+update_time", cumulative_times["rollout_time"] + cumulative_times["update_time"], global_step)
             if args.autotune:
                 logger.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
+
+    plt.figure(1)
+    plt.plot(plot_success_once)
+    plt.show()
+
+    plt.figure(2)
+    plt.plot(plot_return)
+    plt.show()
+    
 
     if not args.evaluate and args.save_model:
         model_path = f"runs/{run_name}/final_ckpt.pt"
