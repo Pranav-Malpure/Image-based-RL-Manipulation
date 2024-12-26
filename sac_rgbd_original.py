@@ -811,6 +811,7 @@ if __name__ == "__main__":
             if args.autotune:
                 logger.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
 
+    print("Yo")
     import pickle
     plt.figure(1)
     plt.plot(plot_success_once)
