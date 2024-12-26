@@ -811,13 +811,19 @@ if __name__ == "__main__":
             if args.autotune:
                 logger.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
 
+    import pickle
     plt.figure(1)
     plt.plot(plot_success_once)
     plt.show()
+    with open('plot_success_once.pickle', 'wb') as file:
+        pickle.dump(plot_success_once, file)
 
     plt.figure(2)
     plt.plot(plot_return)
     plt.show()
+    with open('plot_success_once.pickle', 'wb') as file:
+        pickle.dump(plot_return, file)
+
     
 
     if not args.evaluate and args.save_model:
