@@ -62,7 +62,7 @@ class Args:
     """the id of the environment"""
     obs_mode: str = "rgb"
     """the observation mode to use"""
-    include_state: bool = True
+    include_state: bool = False
     """whether to include the state in the observation"""
     env_vectorization: str = "gpu"
     """the type of environment vectorization to use"""
@@ -384,7 +384,8 @@ class SoftQNetwork(nn.Module):
         super().__init__()
         self.encoder = encoder
         action_dim = np.prod(envs.single_action_space.shape)
-        state_dim = envs.single_observation_space['state'].shape[0]
+        # state_dim = envs.single_observation_space['state'].shape[0]
+        state_dim = 0
         self.mlp = make_mlp(encoder.encoder.out_dim+action_dim+state_dim, [512, 256, 1], last_act=False)
 
     def forward(self, obs, action, visual_feature=None, detach_encoder=False):
@@ -392,7 +393,9 @@ class SoftQNetwork(nn.Module):
             visual_feature = self.encoder(obs)
         if detach_encoder:
             visual_feature = visual_feature.detach()
-        x = torch.cat([visual_feature, obs["state"], action], dim=1)
+        # x = torch.cat([visual_feature, obs["state"], action], dim=1)
+        x = torch.cat([visual_feature, action], dim=1)
+
         return self.mlp(x)
 
 
@@ -403,7 +406,8 @@ class Actor(nn.Module):
     def __init__(self, envs, sample_obs):
         super().__init__()
         action_dim = np.prod(envs.single_action_space.shape)
-        state_dim = envs.single_observation_space['state'].shape[0]
+        # state_dim = envs.single_observation_space['state'].shape[0]
+        state_dim=0
         # count number of channels and image size
         in_channels = 0
         if "rgb" in sample_obs:
@@ -427,7 +431,9 @@ class Actor(nn.Module):
         visual_feature = self.encoder(obs)
         if detach_encoder:
             visual_feature = visual_feature.detach()
-        x = torch.cat([visual_feature, obs['state']], dim=1)
+        # x = torch.cat([visual_feature, obs['state']], dim=1)
+        x = torch.cat([visual_feature], dim=1)
+        print("PASSED LINE 435")
         return self.mlp(x), visual_feature
 
     def forward(self, obs, detach_encoder=False):
@@ -515,8 +521,7 @@ if __name__ == "__main__":
         env_kwargs["sensor_configs"]["height"] = args.camera_height
     envs = gym.make(args.env_id, num_envs=args.num_envs if not args.evaluate else 1, reconfiguration_freq=args.reconfiguration_freq, **env_kwargs)
     eval_envs = gym.make(args.env_id, num_envs=args.num_eval_envs, reconfiguration_freq=args.eval_reconfiguration_freq, human_render_camera_configs=dict(shader_pack="default"), **env_kwargs)
-    print("env obs space",envs.single_observation_space)
-    exit()
+
     # rgbd obs mode returns a dict of data, we flatten it so there is just a rgbd key and state key
     envs = FlattenRGBDObservationWrapper(envs, rgb=True, depth=False, state=args.include_state)
     eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=True, depth=False, state=args.include_state)
