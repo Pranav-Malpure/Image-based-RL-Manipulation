@@ -433,7 +433,6 @@ class Actor(nn.Module):
             visual_feature = visual_feature.detach()
         # x = torch.cat([visual_feature, obs['state']], dim=1)
         x = torch.cat([visual_feature], dim=1)
-        print("PASSED LINE 435")
         return self.mlp(x), visual_feature
 
     def forward(self, obs, detach_encoder=False):
