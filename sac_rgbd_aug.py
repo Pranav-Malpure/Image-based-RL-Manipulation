@@ -249,6 +249,40 @@ class ReplayBuffer:
             dones=self.dones[batch_inds, env_inds].to(self.sample_device)
         )
 
+
+class RandomShiftsAug(nn.Module):
+    def __init__(self, pad):
+        super().__init__()
+        self.pad = pad
+
+    def forward(self, x):
+        n, c, h, w = x.size()
+        assert h == w
+        padding = tuple([self.pad] * 4)
+        x = F.pad(x, padding, 'replicate')
+        eps = 1.0 / (h + 2 * self.pad)
+        arange = torch.linspace(-1.0 + eps,
+                                1.0 - eps,
+                                h + 2 * self.pad,
+                                device=x.device,
+                                dtype=x.dtype)[:h]
+        arange = arange.unsqueeze(0).repeat(h, 1).unsqueeze(2)
+        base_grid = torch.cat([arange, arange.transpose(1, 0)], dim=2)
+        base_grid = base_grid.unsqueeze(0).repeat(n, 1, 1, 1)
+
+        shift = torch.randint(0,
+                              2 * self.pad + 1,
+                              size=(n, 1, 1, 2),
+                              device=x.device,
+                              dtype=x.dtype)
+        shift *= 2.0 / (h + 2 * self.pad)
+
+        grid = base_grid + shift
+        return F.grid_sample(x,
+                             grid,
+                             padding_mode='zeros',
+                             align_corners=False)
+
 # ALGO LOGIC: initialize agent here:
 class PlainConv(nn.Module):
     def __init__(self,
@@ -387,7 +421,7 @@ class SoftQNetwork(nn.Module):
         state_dim = envs.single_observation_space['state'].shape[0]
 
         self.trunk = nn.Sequential(nn.Linear(self.encoder.encoder.out_dim+action_dim + state_dim, 512), nn.LayerNorm(512), nn.Tanh()) # TODO: have to check this 512
-        self.mlp = make_mlp(512, [512, 256, 1], last_act=False)  #TODO check this for 512 input
+        self.mlp = make_mlp(512, [512, 256, 1], last_act=False)  #TODO check this for 512 input(its for RGBD I think)
         # self.mlp = make_mlp(encoder.encoder.out_dim+action_dim+state_dim, [512, 256, 1], last_act=False)
 
     def forward(self, obs, action, visual_feature=None, detach_encoder=False):
@@ -517,8 +551,13 @@ if __name__ == "__main__":
     eval_envs = gym.make(args.env_id, num_envs=args.num_eval_envs, reconfiguration_freq=args.eval_reconfiguration_freq, human_render_camera_configs=dict(shader_pack="default"), **env_kwargs)
 
     # rgbd obs mode returns a dict of data, we flatten it so there is just a rgbd key and state key
+    print(env_kwargs["obs_mode"])
+    exit()
     envs = FlattenRGBDObservationWrapper(envs, rgb=True, depth=False, state=args.include_state)
     eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=True, depth=False, state=args.include_state)
+
+    # data augmentation
+    aug = RandomShiftsAug(pad=4)
 
     if isinstance(envs.action_space, gym.spaces.Dict):
         envs = FlattenActionSpaceWrapper(envs)
@@ -635,6 +674,7 @@ if __name__ == "__main__":
             actor.eval()
             stime = time.perf_counter()
             eval_obs, _ = eval_envs.reset()
+            eval_obs = aug(eval_obs)
             eval_metrics = defaultdict(list)
             num_episodes = 0
             for _ in range(args.num_eval_steps):
