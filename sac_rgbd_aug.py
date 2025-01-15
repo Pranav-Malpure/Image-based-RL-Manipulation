@@ -256,6 +256,7 @@ class RandomShiftsAug(nn.Module):
         self.pad = pad
 
     def forward(self, x):
+        original_x = x
         obs = x
         if "rgb" in obs:
             rgb = obs['rgb'].float() / 255.0 # (B, H, W, 3*k)
@@ -302,6 +303,7 @@ class RandomShiftsAug(nn.Module):
         
         # Split back into 'rgb' and 'depth' if both were present
         result = {}
+        result['state'] = original_x['state']
         if "rgb" in obs and "depth" in obs:
             result['rgb'] = augmented_x[..., :rgb.size(-1)] * 255.0
             result['depth'] = augmented_x[..., rgb.size(-1):]
