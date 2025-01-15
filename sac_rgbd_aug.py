@@ -293,10 +293,24 @@ class RandomShiftsAug(nn.Module):
         shift *= 2.0 / (h + 2 * self.pad)
 
         grid = base_grid + shift
-        return F.grid_sample(x,
+        augmented_x = F.grid_sample(x,
                              grid,
                              padding_mode='zeros',
                              align_corners=False)
+        
+        augmented_x = augmented_x.permute(0, 2, 3, 1)  # (B, H, W, C)
+        
+        # Split back into 'rgb' and 'depth' if both were present
+        result = {}
+        if "rgb" in obs and "depth" in obs:
+            result['rgb'] = augmented_x[..., :rgb.size(-1)] * 255.0
+            result['depth'] = augmented_x[..., rgb.size(-1):]
+        elif "rgb" in obs:
+            result['rgb'] = augmented_x * 255.0
+        elif "depth" in obs:
+            result['depth'] = augmented_x
+        
+        return result
 
 # ALGO LOGIC: initialize agent here:
 class PlainConv(nn.Module):
