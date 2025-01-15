@@ -256,6 +256,21 @@ class RandomShiftsAug(nn.Module):
         self.pad = pad
 
     def forward(self, x):
+        obs = x
+        if "rgb" in obs:
+            rgb = obs['rgb'].float() / 255.0 # (B, H, W, 3*k)
+        if "depth" in obs:
+            depth = obs['depth'].float() # (B, H, W, 1*k)
+        if "rgb" and "depth" in obs:
+            img = torch.cat([rgb, depth], dim=3) # (B, H, W, C)
+        elif "rgb" in obs:
+            img = rgb
+        elif "depth" in obs:
+            img = depth
+        else:
+            raise ValueError(f"Observation dict must contain 'rgb' or 'depth'")
+        x = img.permute(0, 3, 1, 2) # (B, C, H, W)
+
         n, c, h, w = x.size()
         assert h == w
         padding = tuple([self.pad] * 4)
@@ -551,12 +566,27 @@ if __name__ == "__main__":
     eval_envs = gym.make(args.env_id, num_envs=args.num_eval_envs, reconfiguration_freq=args.eval_reconfiguration_freq, human_render_camera_configs=dict(shader_pack="default"), **env_kwargs)
 
     # rgbd obs mode returns a dict of data, we flatten it so there is just a rgbd key and state key
-    if "depth" in env_kwargs["obs_mode"]:
-        print(env_kwargs["obs_mode"])
-        print("Flattening the observation space")
-    exit()
-    envs = FlattenRGBDObservationWrapper(envs, rgb=True, depth=False, state=args.include_state)
-    eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=True, depth=False, state=args.include_state)
+    if "depth" and "rgb"in env_kwargs["obs_mode"]:
+        # print(env_kwargs["obs_mode"])
+        # print("Flattening the observation space")
+        print("rgb_depth start")
+        envs = FlattenRGBDObservationWrapper(envs, rgb=True, depth=True, state=args.include_state)
+        eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=True, depth=True, state=args.include_state)
+    elif "depth" in env_kwargs["obs_mode"]:
+        print("depth start")
+        envs = FlattenRGBDObservationWrapper(envs, rgb=False, depth=True, state=args.include_state)
+        eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=False, depth=True, state=args.include_state)
+    elif "rgb" in env_kwargs["obs_mode"]:
+        print("rgb start")
+        envs = FlattenRGBDObservationWrapper(envs, rgb=True, depth=False, state=args.include_state)
+        eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=True, depth=False, state=args.include_state)
+    else:
+        print("state start")
+        envs = FlattenRGBDObservationWrapper(envs, rgb=False, depth=False, state=args.include_state)
+        eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=False, depth=False, state=args.include_state)
+
+    # envs = FlattenRGBDObservationWrapper(envs, rgb=True, depth=False, state=args.include_state)
+    # eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=True, depth=False, state=args.include_state)
 
     # data augmentation
     aug = RandomShiftsAug(pad=4)
@@ -618,6 +648,9 @@ if __name__ == "__main__":
     # TRY NOT TO MODIFY: start the game
     obs, info = envs.reset(seed=args.seed) # in Gymnasium, seed is given to reset() instead of seed()
     eval_obs, _ = eval_envs.reset(seed=args.seed)
+    print("OBS", obs)
+    obs = aug(obs)
+    eval_obs = aug(eval_obs)
 
     # architecture is all actor, q-networks share the same vision encoder. Output of encoder is concatenates with any state data followed by separate MLPs.
     actor = Actor(envs, sample_obs=obs).to(device)
