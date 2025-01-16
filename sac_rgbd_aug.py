@@ -484,6 +484,9 @@ class Actor(nn.Module):
         if "depth" in sample_obs:
             in_channels += sample_obs["depth"].shape[-1]
             image_size = sample_obs["depth"].shape[1:3]
+        if "rgbd" in sample_obs:
+            in_channels += sample_obs["rgbd"].shape[-1]
+            image_size = sample_obs["rgbd"].shape[1:3]
 
         self.encoder = EncoderObsWrapper(
             PlainConv(in_channels=in_channels, out_dim=256, image_size=image_size) # assume image is 64x64
