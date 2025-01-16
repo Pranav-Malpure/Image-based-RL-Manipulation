@@ -308,6 +308,7 @@ class RandomShiftsAug(nn.Module):
         if "rgbd" in obs:
             augmented_x[..., :3] = augmented_x[..., :3] * 255.0
             result['rgbd'] = augmented_x
+            print("rgbs " ,augmented_x.shape)
         elif "rgb" in obs:
             result['rgb'] = augmented_x * 255.0
         elif "depth" in obs:
