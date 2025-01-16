@@ -429,7 +429,7 @@ class EncoderObsWrapper(nn.Module):
         if "rgbd" in obs:
             # img = torch.cat([rgb, depth], dim=3) # (B, H, W, C)
             img = obs['rgbd'].float()
-            img = img[..., :3]/255.0
+            img[..., :3] = img[..., :3]/255.0
         else:
             raise ValueError(f"Observation dict must contain 'rgb' or 'depth'")
         img = img.permute(0, 3, 1, 2) # (B, C, H, W)
@@ -673,7 +673,6 @@ if __name__ == "__main__":
     obs = aug(obs)
     eval_obs = aug(eval_obs)
 
-    print(obs['rgbd'].shape)
     # architecture is all actor, q-networks share the same vision encoder. Output of encoder is concatenates with any state data followed by separate MLPs.
     actor = Actor(envs, sample_obs=obs).to(device)
     qf1 = SoftQNetwork(envs, actor.encoder).to(device)
