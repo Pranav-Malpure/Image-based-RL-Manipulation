@@ -670,9 +670,10 @@ if __name__ == "__main__":
     # TRY NOT TO MODIFY: start the game
     obs, info = envs.reset(seed=args.seed) # in Gymnasium, seed is given to reset() instead of seed()
     eval_obs, _ = eval_envs.reset(seed=args.seed)
-    print("OBS", obs)
     obs = aug(obs)
+
     eval_obs = aug(eval_obs)
+    print("OBS", obs)
 
     print(obs['rgbd'].shape)
     exit()
