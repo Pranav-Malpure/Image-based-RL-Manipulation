@@ -308,7 +308,6 @@ class RandomShiftsAug(nn.Module):
         if "rgbd" in obs:
             augmented_x[..., :3] = augmented_x[..., :3] * 255.0
             result['rgbd'] = augmented_x
-            print("rgbs " ,augmented_x.shape)
         elif "rgb" in obs:
             result['rgb'] = augmented_x * 255.0
         elif "depth" in obs:
@@ -672,12 +671,8 @@ if __name__ == "__main__":
     obs, info = envs.reset(seed=args.seed) # in Gymnasium, seed is given to reset() instead of seed()
     eval_obs, _ = eval_envs.reset(seed=args.seed)
     obs = aug(obs)
-
     eval_obs = aug(eval_obs)
-    print("OBS", obs)
 
-    print(obs['rgbd'].shape)
-    exit()
     # architecture is all actor, q-networks share the same vision encoder. Output of encoder is concatenates with any state data followed by separate MLPs.
     actor = Actor(envs, sample_obs=obs).to(device)
     qf1 = SoftQNetwork(envs, actor.encoder).to(device)
