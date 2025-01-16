@@ -260,14 +260,14 @@ class RandomShiftsAug(nn.Module):
         obs = x
         if "rgb" in obs:
             rgb = obs['rgb'].float() / 255.0 # (B, H, W, 3*k)
+            img = rgb
         if "depth" in obs:
             depth = obs['depth'].float() # (B, H, W, 1*k)
-        if "rgb" and "depth" in obs:
-            img = torch.cat([rgb, depth], dim=3) # (B, H, W, C)
-        elif "rgb" in obs:
-            img = rgb
-        elif "depth" in obs:
             img = depth
+        if "rgbd" in obs:
+            # img = torch.cat([rgb, depth], dim=3) # (B, H, W, C)
+            img = obs['rgbd'].float()
+            img = img[..., :3]/255.0
         else:
             raise ValueError(f"Observation dict must contain 'rgb' or 'depth'")
         x = img.permute(0, 3, 1, 2) # (B, C, H, W)
@@ -304,9 +304,10 @@ class RandomShiftsAug(nn.Module):
         # Split back into 'rgb' and 'depth' if both were present
         result = {}
         result['state'] = original_x['state']
-        if "rgb" in obs and "depth" in obs:
-            result['rgb'] = augmented_x[..., :rgb.size(-1)] * 255.0
-            result['depth'] = augmented_x[..., rgb.size(-1):]
+        # if "rgb" in obs and "depth" in obs:
+        if "rgbd" in obs:
+            augmented_x[..., :rgb.size(-1)] = augmented_x[..., :rgb.size(-1)] * 255.0
+            result['rgbd'] = augmented_x
         elif "rgb" in obs:
             result['rgb'] = augmented_x * 255.0
         elif "depth" in obs:
@@ -421,14 +422,14 @@ class EncoderObsWrapper(nn.Module):
     def forward(self, obs):
         if "rgb" in obs:
             rgb = obs['rgb'].float() / 255.0 # (B, H, W, 3*k)
+            img = rgb
         if "depth" in obs:
             depth = obs['depth'].float() # (B, H, W, 1*k)
-        if "rgb" and "depth" in obs:
-            img = torch.cat([rgb, depth], dim=3) # (B, H, W, C)
-        elif "rgb" in obs:
-            img = rgb
-        elif "depth" in obs:
             img = depth
+        if "rgbd" in obs:
+            # img = torch.cat([rgb, depth], dim=3) # (B, H, W, C)
+            img = obs['rgbd'].float()
+            img = img[..., :3]/255.0
         else:
             raise ValueError(f"Observation dict must contain 'rgb' or 'depth'")
         img = img.permute(0, 3, 1, 2) # (B, C, H, W)
