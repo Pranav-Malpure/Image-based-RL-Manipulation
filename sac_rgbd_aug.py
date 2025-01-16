@@ -267,7 +267,7 @@ class RandomShiftsAug(nn.Module):
         if "rgbd" in obs:
             # img = torch.cat([rgb, depth], dim=3) # (B, H, W, C)
             img = obs['rgbd'].float()
-            img = img[..., :3]/255.0
+            img[..., :3] = img[..., :3]/255.0
         else:
             raise ValueError(f"Observation dict must contain 'rgb' or 'depth'")
         x = img.permute(0, 3, 1, 2) # (B, C, H, W)
