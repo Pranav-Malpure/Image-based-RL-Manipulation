@@ -673,7 +673,7 @@ if __name__ == "__main__":
     obs = aug(obs)
     eval_obs = aug(eval_obs)
 
-    print(obs.shape, obs.dtype)
+    print(obs['rgbd'].shape)
     # architecture is all actor, q-networks share the same vision encoder. Output of encoder is concatenates with any state data followed by separate MLPs.
     actor = Actor(envs, sample_obs=obs).to(device)
     qf1 = SoftQNetwork(envs, actor.encoder).to(device)
