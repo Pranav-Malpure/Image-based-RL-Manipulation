@@ -425,10 +425,10 @@ class EncoderObsWrapper(nn.Module):
         if "rgb" in obs:
             rgb = obs['rgb'].float() / 255.0 # (B, H, W, 3*k)
             img = rgb
-        if "depth" in obs:
+        elif "depth" in obs:
             depth = obs['depth'].float() # (B, H, W, 1*k)
             img = depth
-        if "rgbd" in obs:
+        elif "rgbd" in obs:
             # img = torch.cat([rgb, depth], dim=3) # (B, H, W, C)
             img = obs['rgbd'].float()
             img[..., :3] = img[..., :3]/255.0
