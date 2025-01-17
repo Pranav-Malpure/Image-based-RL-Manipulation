@@ -65,9 +65,9 @@ class Args:
     """whether to include the state in the observation"""
     env_vectorization: str = "gpu"
     """the type of environment vectorization to use"""
-    num_envs: int = 8
+    num_envs: int = 4
     """the number of parallel environments"""
-    num_eval_envs: int = 8
+    num_eval_envs: int = 4
     """the number of parallel evaluation environments"""
     partial_reset: bool = False
     """whether to let parallel environments reset upon termination instead of truncation"""
