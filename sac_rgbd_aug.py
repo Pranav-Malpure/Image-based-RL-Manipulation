@@ -258,8 +258,9 @@ class RandomShiftsAug(nn.Module):
     def forward(self, x):
         original_x = x
         obs = x
-        print("OBS inside RandomShiftsAug: ", obs)
+        # print("OBS inside RandomShiftsAug: ", obs)
         if "rgb" in obs:
+            print("inside rgb")
             rgb = obs['rgb'].float() / 255.0 # (B, H, W, 3*k)
             img = rgb
         if "depth" in obs:
