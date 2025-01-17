@@ -258,6 +258,7 @@ class RandomShiftsAug(nn.Module):
     def forward(self, x):
         original_x = x
         obs = x
+        print("OBS inside RandomShiftsAug: ", obs)
         if "rgb" in obs:
             rgb = obs['rgb'].float() / 255.0 # (B, H, W, 3*k)
             img = rgb
@@ -670,7 +671,7 @@ if __name__ == "__main__":
     # TRY NOT TO MODIFY: start the game
     obs, info = envs.reset(seed=args.seed) # in Gymnasium, seed is given to reset() instead of seed()
     eval_obs, _ = eval_envs.reset(seed=args.seed)
-    print("OBS ", obs)
+    # print("OBS ", obs)
     obs = aug(obs)
     eval_obs = aug(eval_obs)
 
