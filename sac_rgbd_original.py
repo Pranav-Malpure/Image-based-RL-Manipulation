@@ -556,8 +556,22 @@ if __name__ == "__main__":
     eval_envs = gym.make(args.env_id, num_envs=args.num_eval_envs, reconfiguration_freq=args.eval_reconfiguration_freq, human_render_camera_configs=dict(shader_pack="default"), **env_kwargs)
 
     # rgbd obs mode returns a dict of data, we flatten it so there is just a rgbd key and state key
-    envs = FlattenRGBDObservationWrapper(envs, rgb=True, depth=False, state=args.include_state)
-    eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=True, depth=False, state=args.include_state)
+    if "depth" in env_kwargs["obs_mode"] and "rgb" in env_kwargs["obs_mode"]:
+        print("rgb_depth start")
+        envs = FlattenRGBDObservationWrapper(envs, rgb=True, depth=True, state=args.include_state)
+        eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=True, depth=True, state=args.include_state)
+    elif "depth" in env_kwargs["obs_mode"]:
+        print("depth start")
+        envs = FlattenRGBDObservationWrapper(envs, rgb=False, depth=True, state=args.include_state)
+        eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=False, depth=True, state=args.include_state)
+    elif "rgb" in env_kwargs["obs_mode"]:
+        print("rgb start")
+        envs = FlattenRGBDObservationWrapper(envs, rgb=True, depth=False, state=args.include_state)
+        eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=True, depth=False, state=args.include_state)
+    else:
+        print("state start")
+        envs = FlattenRGBDObservationWrapper(envs, rgb=False, depth=False, state=args.include_state)
+        eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=False, depth=False, state=args.include_state)
 
     if isinstance(envs.action_space, gym.spaces.Dict):
         envs = FlattenActionSpaceWrapper(envs)
