@@ -23,7 +23,6 @@ from torch.utils.tensorboard import SummaryWriter
 import tyro
 
 import mani_skill.envs
-import matplotlib.pyplot as plt
 
 
 @dataclass
@@ -62,7 +61,7 @@ class Args:
     """the id of the environment"""
     obs_mode: str = "rgb"
     """the observation mode to use"""
-    include_state: bool = True
+    include_state: bool = False
     """whether to include the state in the observation"""
     env_vectorization: str = "gpu"
     """the type of environment vectorization to use"""
@@ -136,6 +135,7 @@ class Args:
     """the number of gradient updates per iteration"""
     steps_per_env: int = 0
     """the number of steps each parallel env takes per iteration"""
+
 class DictArray(object):
     def __init__(self, buffer_shape, element_space, data_dict=None, device=None):
         self.buffer_shape = buffer_shape
@@ -256,6 +256,23 @@ class RandomShiftsAug(nn.Module):
         self.pad = pad
 
     def forward(self, x):
+        original_x = x
+        obs = x
+        # print("OBS inside RandomShiftsAug: ", obs)
+        if "rgb" in obs:
+            rgb = obs['rgb'].float() / 255.0 # (B, H, W, 3*k)
+            img = rgb
+        elif "depth" in obs:
+            depth = obs['depth'].float() # (B, H, W, 1*k)
+            img = depth
+        elif "rgbd" in obs:
+            # img = torch.cat([rgb, depth], dim=3) # (B, H, W, C)
+            img = obs['rgbd'].float()
+            img[..., :3] = img[..., :3]/255.0
+        else:
+            raise ValueError(f"Observation dict must contain 'rgb' or 'depth'")
+        x = img.permute(0, 3, 1, 2) # (B, C, H, W)
+
         n, c, h, w = x.size()
         assert h == w
         padding = tuple([self.pad] * 4)
@@ -278,10 +295,27 @@ class RandomShiftsAug(nn.Module):
         shift *= 2.0 / (h + 2 * self.pad)
 
         grid = base_grid + shift
-        return F.grid_sample(x,
+        augmented_x = F.grid_sample(x,
                              grid,
                              padding_mode='zeros',
                              align_corners=False)
+        
+        augmented_x = augmented_x.permute(0, 2, 3, 1)  # (B, H, W, C)
+        
+        # Split back into 'rgb' and 'depth' if both were present
+        result = {}
+        if args.include_state:
+            result['state'] = original_x['state']
+        # if "rgb" in obs and "depth" in obs:
+        if "rgbd" in obs:
+            augmented_x[..., :3] = augmented_x[..., :3] * 255.0
+            result['rgbd'] = augmented_x
+        elif "rgb" in obs:
+            result['rgb'] = augmented_x * 255.0
+        elif "depth" in obs:
+            result['depth'] = augmented_x
+        
+        return result
 
 # ALGO LOGIC: initialize agent here:
 class PlainConv(nn.Module):
@@ -390,14 +424,14 @@ class EncoderObsWrapper(nn.Module):
     def forward(self, obs):
         if "rgb" in obs:
             rgb = obs['rgb'].float() / 255.0 # (B, H, W, 3*k)
-        if "depth" in obs:
-            depth = obs['depth'].float() # (B, H, W, 1*k)
-        if "rgb" and "depth" in obs:
-            img = torch.cat([rgb, depth], dim=3) # (B, H, W, C)
-        elif "rgb" in obs:
             img = rgb
         elif "depth" in obs:
+            depth = obs['depth'].float() # (B, H, W, 1*k)
             img = depth
+        elif "rgbd" in obs:
+            # img = torch.cat([rgb, depth], dim=3) # (B, H, W, C)
+            img = obs['rgbd'].float()
+            img[..., :3] = img[..., :3]/255.0
         else:
             raise ValueError(f"Observation dict must contain 'rgb' or 'depth'")
         img = img.permute(0, 3, 1, 2) # (B, C, H, W)
@@ -418,19 +452,24 @@ class SoftQNetwork(nn.Module):
         super().__init__()
         self.encoder = encoder
         action_dim = np.prod(envs.single_action_space.shape)
-        # state_dim = envs.single_observation_space['state'].shape[0]
-        state_dim = 0
-        self.mlp = make_mlp(encoder.encoder.out_dim+action_dim+state_dim, [512, 256, 1], last_act=False)
+        if args.include_state:
+            state_dim = envs.single_observation_space['state'].shape[0]
+
+        self.trunk = nn.Sequential(nn.Linear(self.encoder.encoder.out_dim+action_dim, 512), nn.LayerNorm(512), nn.Tanh()) # TODO: have to check this 512
+        self.mlp = make_mlp(512, [512, 256, 1], last_act=False)  #TODO check this for 512 input(its for RGBD I think)
+        # self.mlp = make_mlp(encoder.encoder.out_dim+action_dim+state_dim, [512, 256, 1], last_act=False)
 
     def forward(self, obs, action, visual_feature=None, detach_encoder=False):
+        if obs is None:
+            print("here is the mistake")
         if visual_feature is None:
             visual_feature = self.encoder(obs)
         if detach_encoder:
             visual_feature = visual_feature.detach()
         # x = torch.cat([visual_feature, obs["state"], action], dim=1)
         x = torch.cat([visual_feature, action], dim=1)
-
-        return self.mlp(x)
+        h = self.trunk(x)
+        return self.mlp(h)
 
 
 LOG_STD_MAX = 2
@@ -440,8 +479,8 @@ class Actor(nn.Module):
     def __init__(self, envs, sample_obs):
         super().__init__()
         action_dim = np.prod(envs.single_action_space.shape)
-        # state_dim = envs.single_observation_space['state'].shape[0]
-        state_dim=0
+        if args.include_state:
+            state_dim = envs.single_observation_space['state'].shape[0]
         # count number of channels and image size
         in_channels = 0
         if "rgb" in sample_obs:
@@ -450,11 +489,18 @@ class Actor(nn.Module):
         if "depth" in sample_obs:
             in_channels += sample_obs["depth"].shape[-1]
             image_size = sample_obs["depth"].shape[1:3]
+        if "rgbd" in sample_obs:
+            in_channels += sample_obs["rgbd"].shape[-1]
+            image_size = sample_obs["rgbd"].shape[1:3]
 
         self.encoder = EncoderObsWrapper(
             PlainConv(in_channels=in_channels, out_dim=256, image_size=image_size) # assume image is 64x64
         )
-        self.mlp = make_mlp(self.encoder.encoder.out_dim+state_dim, [512, 256], last_act=True)
+
+        self.trunk = nn.Sequential(nn.Linear(self.encoder.encoder.out_dim, 512), nn.LayerNorm(512), nn.Tanh()) # TODO: have to check this 512
+
+        self.mlp = nn.Sequential(*make_mlp(512, [512, 256], last_act=True))
+        # self.mlp = make_mlp(512, [512, 256], last_act=True)
         self.fc_mean = nn.Linear(256, action_dim)
         self.fc_logstd = nn.Linear(256, action_dim)
         # action rescaling
@@ -466,8 +512,9 @@ class Actor(nn.Module):
         if detach_encoder:
             visual_feature = visual_feature.detach()
         # x = torch.cat([visual_feature, obs['state']], dim=1)
-        x = torch.cat([visual_feature], dim=1)
-        return self.mlp(x), visual_feature
+        x = visual_feature
+        h = self.trunk(x)
+        return self.mlp(h), visual_feature
 
     def forward(self, obs, detach_encoder=False):
         x, visual_feature = self.get_feature(obs, detach_encoder)
@@ -514,14 +561,8 @@ class Logger:
         self.writer.close()
 
 if __name__ == "__main__":
-    # os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"  # Use GPUs 0 and 1
-    # Set random seed for reproducibility
-    # device =range(torch.cuda.device_count())
-    # torch.cuda.manual_seed_all(42)
-    # devices = range(torch.cuda.device_count())
-    # for i in range(torch.cuda.device_count()):
-    #     torch.cuda.set_device(i)  # Switch to the device
-    #     torch.randn(1).cuda() 
+    
+    
     plot_return = []
     plot_success_once = []
     args = tyro.cli(Args)
@@ -532,9 +573,6 @@ if __name__ == "__main__":
         run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
     else:
         run_name = args.exp_name
-    # args.num_envs = args.num_envs * torch.cuda.device_count()
-    # args.num_eval_envs = args.num_eval_envs * torch.cuda.device_count()
-    # args.batch_size *= torch.cuda.device_count()
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
@@ -543,6 +581,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+
     ####### Environment setup #######
     env_kwargs = dict(obs_mode=args.obs_mode, render_mode=args.render_mode, sim_backend="gpu", sensor_configs=dict())
     if args.control_mode is not None:
@@ -556,8 +595,29 @@ if __name__ == "__main__":
     eval_envs = gym.make(args.env_id, num_envs=args.num_eval_envs, reconfiguration_freq=args.eval_reconfiguration_freq, human_render_camera_configs=dict(shader_pack="default"), **env_kwargs)
 
     # rgbd obs mode returns a dict of data, we flatten it so there is just a rgbd key and state key
-    envs = FlattenRGBDObservationWrapper(envs, rgb=True, depth=False, state=args.include_state)
-    eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=True, depth=False, state=args.include_state)
+    print(" env_kwargs[obs_mode]: ",env_kwargs["obs_mode"])
+    if "depth" in env_kwargs["obs_mode"] and "rgb" in env_kwargs["obs_mode"]:
+        print("rgb_depth start")
+        envs = FlattenRGBDObservationWrapper(envs, rgb=True, depth=True, state=args.include_state)
+        eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=True, depth=True, state=args.include_state)
+    elif "depth" in env_kwargs["obs_mode"]:
+        print("depth start")
+        envs = FlattenRGBDObservationWrapper(envs, rgb=False, depth=True, state=args.include_state)
+        eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=False, depth=True, state=args.include_state)
+    elif "rgb" in env_kwargs["obs_mode"]:
+        print("rgb start")
+        envs = FlattenRGBDObservationWrapper(envs, rgb=True, depth=False, state=args.include_state)
+        eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=True, depth=False, state=args.include_state)
+    else:
+        print("state start")
+        envs = FlattenRGBDObservationWrapper(envs, rgb=False, depth=False, state=args.include_state)
+        eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=False, depth=False, state=args.include_state)
+
+    # envs = FlattenRGBDObservationWrapper(envs, rgb=True, depth=False, state=args.include_state)
+    # eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=True, depth=False, state=args.include_state)
+
+    # data augmentation
+    aug = RandomShiftsAug(pad=4)
 
     if isinstance(envs.action_space, gym.spaces.Dict):
         envs = FlattenActionSpaceWrapper(envs)
@@ -616,9 +676,10 @@ if __name__ == "__main__":
     # TRY NOT TO MODIFY: start the game
     obs, info = envs.reset(seed=args.seed) # in Gymnasium, seed is given to reset() instead of seed()
     eval_obs, _ = eval_envs.reset(seed=args.seed)
+    # print("OBS ", obs)
+    obs = aug(obs)
+    eval_obs = aug(eval_obs)
 
-    # obs = obs.to(device)
-    # eval_obs = eval_obs.to(device)
     # architecture is all actor, q-networks share the same vision encoder. Output of encoder is concatenates with any state data followed by separate MLPs.
     actor = Actor(envs, sample_obs=obs).to(device)
     qf1 = SoftQNetwork(envs, actor.encoder).to(device)
@@ -626,22 +687,24 @@ if __name__ == "__main__":
     qf1_target = SoftQNetwork(envs, actor.encoder).to(device)
     qf2_target = SoftQNetwork(envs, actor.encoder).to(device)
 
-    # actor = nn.DataParallel(Actor(envs, sample_obs=obs)).to(device)
-    # qf1 = nn.DataParallel(SoftQNetwork(envs, actor.module.encoder)).to(device)
-    # qf2 = nn.DataParallel(SoftQNetwork(envs, actor.module.encoder)).to(device)
-    # qf1_target = nn.DataParallel(SoftQNetwork(envs, actor.module.encoder)).to(device)
-    # qf2_target = nn.DataParallel(SoftQNetwork(envs, actor.module.encoder)).to(device)
+    # actor = Actor(envs, sample_obs=obs)
+    # qf1 = SoftQNetwork(envs, actor.encoder)
+    # qf2 = SoftQNetwork(envs, actor.encoder)
+    # qf1_target = SoftQNetwork(envs, actor.encoder)
+    # qf2_target = SoftQNetwork(envs, actor.encoder)
+
+    # actor = nn.DataParallel(actor)
+    # qf1 = nn.DataParallel(qf1)
+    # qf2 = nn.DataParallel(qf2)
+    # qf1_target = nn.DataParallel(qf1_target)
+    # qf2_target = nn.DataParallel(qf2_target)
+
+
     if args.checkpoint is not None:
         ckpt = torch.load(args.checkpoint)
         actor.load_state_dict(ckpt['actor'])
         qf1.load_state_dict(ckpt['qf1'])
         qf2.load_state_dict(ckpt['qf2'])
-        # Loading
-        # ckpt = torch.load(args.checkpoint)
-        # actor.module.load_state_dict(ckpt['actor'])
-        # qf1.module.load_state_dict(ckpt['qf1'])
-        # qf2.module.load_state_dict(ckpt['qf2'])
-
     qf1_target.load_state_dict(qf1.state_dict())
     qf2_target.load_state_dict(qf2.state_dict())
     q_optimizer = optim.Adam(
@@ -650,11 +713,7 @@ if __name__ == "__main__":
         list(qf1.encoder.parameters()),
         lr=args.q_lr)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
-    # q_optimizer = optim.Adam(
-    #     list(qf1.module.mlp.parameters()) + list(qf2.module.mlp.parameters()) + list(qf1.module.encoder.parameters()),
-    #     lr=args.q_lr
-    #     )
-    # actor_optimizer = optim.Adam(list(actor.module.parameters()), lr=args.policy_lr)
+
     # Automatic entropy tuning
     if args.autotune:
         target_entropy = -torch.prod(torch.Tensor(envs.single_action_space.shape).to(device)).item()
@@ -678,11 +737,12 @@ if __name__ == "__main__":
             actor.eval()
             stime = time.perf_counter()
             eval_obs, _ = eval_envs.reset()
+            eval_obs = aug(eval_obs)
             eval_metrics = defaultdict(list)
             num_episodes = 0
             for _ in range(args.num_eval_steps):
                 with torch.no_grad():
-                    eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = eval_envs.step(actor.get_eval_action(eval_obs))
+                    eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = eval_envs.step(actor.get_eval_action(aug(eval_obs)))
                     if "final_info" in eval_infos:
                         mask = eval_infos["_final_info"]
                         num_episodes += mask.sum()
@@ -700,7 +760,6 @@ if __name__ == "__main__":
             )
             plot_success_once.append(eval_metrics_mean['success_once'])
             plot_return.append(eval_metrics_mean['return'])
-
             if logger is not None:
                 eval_time = time.perf_counter() - stime
                 cumulative_times["eval_time"] += eval_time
@@ -717,13 +776,6 @@ if __name__ == "__main__":
                     'qf2': qf2_target.state_dict(),
                     'log_alpha': log_alpha,
                 }, model_path)
-
-                # torch.save({
-                # 'actor': actor.module.state_dict(),
-                # 'qf1': qf1.module.state_dict(),
-                # 'qf2': qf2.module.state_dict(),
-                # 'log_alpha': log_alpha,
-                # }, model_path)
                 print(f"model saved to {model_path}")
 
         # Collect samples from environemnts
@@ -735,7 +787,7 @@ if __name__ == "__main__":
             if not learning_has_started:
                 actions = torch.tensor(envs.action_space.sample(), dtype=torch.float32, device=device)
             else:
-                actions, _, _, _ = actor.get_action(obs)
+                actions, _, _, _ = actor.get_action(aug(obs))
                 actions = actions.detach()
 
             # TRY NOT TO MODIFY: execute the game and log data.
@@ -770,7 +822,6 @@ if __name__ == "__main__":
         # ALGO LOGIC: training.
         if global_step < args.learning_starts:
             continue
-
 
         update_time = time.perf_counter()
         learning_has_started = True
@@ -849,6 +900,8 @@ if __name__ == "__main__":
             logger.add_scalar("time/total_rollout+update_time", cumulative_times["rollout_time"] + cumulative_times["update_time"], global_step)
             if args.autotune:
                 logger.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
+    
+
 
     print("Yo")
     import pickle
@@ -863,8 +916,6 @@ if __name__ == "__main__":
     # plt.show()
     with open('plot_return.pickle', 'wb') as file:
         pickle.dump(plot_return, file)
-
-    
 
     if not args.evaluate and args.save_model:
         model_path = f"runs/{run_name}/final_ckpt.pt"
