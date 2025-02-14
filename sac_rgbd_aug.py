@@ -129,6 +129,8 @@ class Args:
     """the width of the camera image. If none it will use the default the environment specifies"""
     camera_height: Optional[int] = None
     """the height of the camera image. If none it will use the default the environment specifies."""
+    robot_uids: str = "panda"
+    """the robot uids to use. If none it will use the default the environment specifies."""
 
     # to be filled in runtime
     grad_steps_per_iteration: int = 0
