@@ -252,72 +252,6 @@ class ReplayBuffer:
         )
 
 
-class RandomShiftsAug(nn.Module):
-    def __init__(self, pad):
-        super().__init__()
-        self.pad = pad
-
-    def forward(self, x):
-        original_x = x
-        obs = x
-        # print("OBS inside RandomShiftsAug: ", obs)
-        if "rgb" in obs:
-            rgb = obs['rgb'].float() / 255.0 # (B, H, W, 3*k)
-            img = rgb
-        elif "depth" in obs:
-            depth = obs['depth'].float() # (B, H, W, 1*k)
-            img = depth
-        elif "rgbd" in obs:
-            # img = torch.cat([rgb, depth], dim=3) # (B, H, W, C)
-            img = obs['rgbd'].float()
-            img[..., :3] = img[..., :3]/255.0
-        else:
-            raise ValueError(f"Observation dict must contain 'rgb' or 'depth'")
-        x = img.permute(0, 3, 1, 2) # (B, C, H, W)
-
-        n, c, h, w = x.size()
-        assert h == w
-        padding = tuple([self.pad] * 4)
-        x = F.pad(x, padding, 'replicate')
-        eps = 1.0 / (h + 2 * self.pad)
-        arange = torch.linspace(-1.0 + eps,
-                                1.0 - eps,
-                                h + 2 * self.pad,
-                                device=x.device,
-                                dtype=x.dtype)[:h]
-        arange = arange.unsqueeze(0).repeat(h, 1).unsqueeze(2)
-        base_grid = torch.cat([arange, arange.transpose(1, 0)], dim=2)
-        base_grid = base_grid.unsqueeze(0).repeat(n, 1, 1, 1)
-
-        shift = torch.randint(0,
-                              2 * self.pad + 1,
-                              size=(n, 1, 1, 2),
-                              device=x.device,
-                              dtype=x.dtype)
-        shift *= 2.0 / (h + 2 * self.pad)
-
-        grid = base_grid + shift
-        augmented_x = F.grid_sample(x,
-                             grid,
-                             padding_mode='zeros',
-                             align_corners=False)
-        
-        augmented_x = augmented_x.permute(0, 2, 3, 1)  # (B, H, W, C)
-        
-        # Split back into 'rgb' and 'depth' if both were present
-        result = {}
-        result['state'] = original_x['state']
-        # if "rgb" in obs and "depth" in obs:
-        if "rgbd" in obs:
-            augmented_x[..., :3] = augmented_x[..., :3] * 255.0
-            result['rgbd'] = augmented_x
-        elif "rgb" in obs:
-            result['rgb'] = augmented_x * 255.0
-        elif "depth" in obs:
-            result['depth'] = augmented_x
-        
-        return result
-
 # ALGO LOGIC: initialize agent here:
 class PlainConv(nn.Module):
     def __init__(self,
@@ -366,57 +300,6 @@ class PlainConv(nn.Module):
         x = self.fc(x)
         return x
 
-# class Encoder(nn.Module):
-#     def __init__(self, sample_obs):
-#         super().__init__()
-
-#         extractors = {}
-
-#         self.out_features = 0
-#         feature_size = 256
-#         in_channels=sample_obs["rgb"].shape[-1]
-#         image_size=(sample_obs["rgb"].shape[1], sample_obs["rgb"].shape[2])
-
-
-#         # here we use a NatureCNN architecture to process images, but any architecture is permissble here
-#         cnn = nn.Sequential(
-#             nn.Conv2d(
-#                 in_channels=in_channels,
-#                 out_channels=32,
-#                 kernel_size=8,
-#                 stride=4,
-#                 padding=0,
-#             ),
-#             nn.ReLU(),
-#             nn.Conv2d(
-#                 in_channels=32, out_channels=64, kernel_size=4, stride=2, padding=0
-#             ),
-#             nn.ReLU(),
-#             nn.Conv2d(
-#                 in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=0
-#             ),
-#             nn.ReLU(),
-#             nn.Flatten(),
-#         )
-
-#         # to easily figure out the dimensions after flattening, we pass a test tensor
-#         with torch.no_grad():
-#             n_flatten = cnn(sample_obs["rgb"].float().permute(0,3,1,2).cpu()).shape[1]
-#             fc = nn.Sequential(nn.Linear(n_flatten, feature_size), nn.ReLU())
-#         extractors["rgb"] = nn.Sequential(cnn, fc)
-#         self.out_features += feature_size
-#         self.extractors = nn.ModuleDict(extractors)
-
-#     def forward(self, observations) -> torch.Tensor:
-#         encoded_tensor_list = []
-#         # self.extractors contain nn.Modules that do all the processing.
-#         for key, extractor in self.extractors.items():
-#             obs = observations[key]
-#             if key == "rgb":
-#                 obs = obs.float().permute(0,3,1,2)
-#                 obs = obs / 255
-#             encoded_tensor_list.append(extractor(obs))
-#         return torch.cat(encoded_tensor_list, dim=1)
 class EncoderObsWrapper(nn.Module):
     def __init__(self, encoder):
         super().__init__()
