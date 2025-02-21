@@ -35,11 +35,11 @@ class Args:
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
     cuda: bool = True
     """if toggled, cuda will be enabled by default"""
-    track: bool = False
+    track: bool = True
     """if toggled, this experiment will be tracked with Weights and Biases"""
-    wandb_project_name: str = "ManiSkill"
+    wandb_project_name: str = "testing"
     """the wandb's project name"""
-    wandb_entity: Optional[str] = None
+    wandb_entity: Optional[str] = "Pranav-RL-sim2real"
     """the entity (team) of wandb's project"""
     wandb_group: str = "SAC"
     """the group of the run for wandb"""
@@ -548,6 +548,7 @@ class Actor(nn.Module):
         self.action_bias = self.action_bias.to(device)
         return super().to(device)
 
+
 class Logger:
     def __init__(self, log_wandb=False, tensorboard: SummaryWriter = None) -> None:
         self.writer = tensorboard
@@ -558,6 +559,7 @@ class Logger:
         self.writer.add_scalar(tag, scalar_value, step)
     def close(self):
         self.writer.close()
+
 
 if __name__ == "__main__":
     
@@ -580,7 +582,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-
+    use_augmentation = False
     ####### Environment setup #######
     env_kwargs = dict(obs_mode=args.obs_mode, render_mode=args.render_mode, robot_uids = args.robot_uids, sim_backend="gpu", sensor_configs=dict())
     if args.control_mode is not None:
@@ -640,10 +642,12 @@ if __name__ == "__main__":
         print("Running training")
         if args.track:
             import wandb
+
             config = vars(args)
             config["env_cfg"] = dict(**env_kwargs, num_envs=args.num_envs, env_id=args.env_id, reward_mode="normalized_dense", env_horizon=max_episode_steps, partial_reset=args.partial_reset)
             config["eval_env_cfg"] = dict(**env_kwargs, num_envs=args.num_eval_envs, env_id=args.env_id, reward_mode="normalized_dense", env_horizon=max_episode_steps, partial_reset=False)
             wandb.init(
+                key="ef1a1b0f1e6f448c0251f237bf89d1a18f05126e",
                 project=args.wandb_project_name,
                 entity=args.wandb_entity,
                 sync_tensorboard=False,
@@ -676,8 +680,9 @@ if __name__ == "__main__":
     obs, info = envs.reset(seed=args.seed) # in Gymnasium, seed is given to reset() instead of seed()
     eval_obs, _ = eval_envs.reset(seed=args.seed)
     # print("OBS ", obs)
-    obs = aug(obs)
-    eval_obs = aug(eval_obs)
+    if use_augmentation:
+        obs = aug(obs)
+        eval_obs = aug(eval_obs)
 
     # architecture is all actor, q-networks share the same vision encoder. Output of encoder is concatenates with any state data followed by separate MLPs.
     actor = Actor(envs, sample_obs=obs).to(device)
@@ -698,7 +703,8 @@ if __name__ == "__main__":
     # qf1_target = nn.DataParallel(qf1_target)
     # qf2_target = nn.DataParallel(qf2_target)
     eval_obs, _ = eval_envs.reset()
-    eval_obs = aug(eval_obs)
+    if use_augmentation:
+        eval_obs = aug(eval_obs)
     print("Action actor: ", actor.get_eval_action(eval_obs))
     if args.checkpoint is not None:
         ckpt = torch.load(args.checkpoint)
@@ -737,12 +743,17 @@ if __name__ == "__main__":
             actor.eval()
             stime = time.perf_counter()
             eval_obs, _ = eval_envs.reset()
-            eval_obs = aug(eval_obs)
+            if use_augmentation:
+                eval_obs = aug(eval_obs)
             eval_metrics = defaultdict(list)
             num_episodes = 0
             for _ in range(args.num_eval_steps):
                 with torch.no_grad():
-                    eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = eval_envs.step(actor.get_eval_action(aug(eval_obs)))
+                    if use_augmentation:
+                        eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = eval_envs.step(actor.get_eval_action(aug(eval_obs)))
+                    else:
+                        eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = eval_envs.step(actor.get_eval_action(eval_obs))
+
                     if "final_info" in eval_infos:
                         mask = eval_infos["_final_info"]
                         num_episodes += mask.sum()
@@ -789,7 +800,10 @@ if __name__ == "__main__":
                 modified_env_action[:,5] = 0
                 actions = torch.tensor(modified_env_action, dtype=torch.float32, device=device)
             else:
-                actions, _, _, _ = actor.get_action(aug(obs))
+                if use_augmentation:
+                    actions, _, _, _ = actor.get_action(aug(obs))
+                else:
+                    actions, _, _, _ = actor.get_action(obs)
                 actions = actions.detach()
             print("Action envs? " ,actions)
             # TRY NOT TO MODIFY: execute the game and log data.
