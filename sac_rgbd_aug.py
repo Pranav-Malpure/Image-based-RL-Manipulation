@@ -39,7 +39,7 @@ class Args:
     """if toggled, this experiment will be tracked with Weights and Biases"""
     wandb_project_name: str = "testing"
     """the wandb's project name"""
-    wandb_entity: Optional[str] = "Pranav-RL-sim2real"
+    wandb_entity: Optional[str] = "pranavmalpure-uc-san-diego-health"
     """the entity (team) of wandb's project"""
     wandb_group: str = "SAC"
     """the group of the run for wandb"""
@@ -525,7 +525,7 @@ class Actor(nn.Module):
     def get_eval_action(self, obs):
         mean, log_std, _ = self(obs)
         action = torch.tanh(mean) * self.action_scale + self.action_bias
-        action[:,5] = 0
+        # action[:,5] = 0
         return action
 
     def get_action(self, obs, detach_encoder=False):
@@ -540,7 +540,7 @@ class Actor(nn.Module):
         log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + 1e-6)
         log_prob = log_prob.sum(1, keepdim=True)
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
-        action[:,5] = 0
+        # action[:,5] = 0
         return action, log_prob, mean, visual_feature
 
     def to(self, device):
@@ -705,7 +705,7 @@ if __name__ == "__main__":
     eval_obs, _ = eval_envs.reset()
     if use_augmentation:
         eval_obs = aug(eval_obs)
-    print("Action actor: ", actor.get_eval_action(eval_obs))
+    # print("Action actor: ", actor.get_eval_action(eval_obs))
     if args.checkpoint is not None:
         ckpt = torch.load(args.checkpoint)
         actor.load_state_dict(ckpt['actor'])
@@ -797,7 +797,7 @@ if __name__ == "__main__":
             # ALGO LOGIC: put action logic here
             if not learning_has_started:
                 modified_env_action = envs.action_space.sample()
-                modified_env_action[:,5] = 0
+                # modified_env_action[:,5] = 0
                 actions = torch.tensor(modified_env_action, dtype=torch.float32, device=device)
             else:
                 if use_augmentation:
@@ -805,7 +805,7 @@ if __name__ == "__main__":
                 else:
                     actions, _, _, _ = actor.get_action(obs)
                 actions = actions.detach()
-            print("Action envs? " ,actions)
+            # print("Action envs? " ,actions)
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, rewards, terminations, truncations, infos = envs.step(actions)
             real_next_obs = {k:v.clone() for k, v in next_obs.items()}
