@@ -646,8 +646,8 @@ if __name__ == "__main__":
             config = vars(args)
             config["env_cfg"] = dict(**env_kwargs, num_envs=args.num_envs, env_id=args.env_id, reward_mode="normalized_dense", env_horizon=max_episode_steps, partial_reset=args.partial_reset)
             config["eval_env_cfg"] = dict(**env_kwargs, num_envs=args.num_eval_envs, env_id=args.env_id, reward_mode="normalized_dense", env_horizon=max_episode_steps, partial_reset=False)
+            wandb.login(key="ef1a1b0f1e6f448c0251f237bf89d1a18f05126e")
             wandb.init(
-                key="ef1a1b0f1e6f448c0251f237bf89d1a18f05126e",
                 project=args.wandb_project_name,
                 entity=args.wandb_entity,
                 sync_tensorboard=False,
