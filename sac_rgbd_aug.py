@@ -46,6 +46,8 @@ class Args:
     """the group of the run for wandb"""
     capture_video: bool = True
     """whether to capture videos of the agent performances (check out `videos` folder)"""
+    wandb_video_freq: int = 0
+    """frequency to log videos to wandb in terms of environment steps (multiple of eval_freq)"""
     save_trajectory: bool = False
     """whether to save trajectory data into the `videos` folder"""
     save_model: bool = True
