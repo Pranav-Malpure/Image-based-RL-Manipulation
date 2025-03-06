@@ -14,12 +14,12 @@ spec:
       name: pm-slow-vol2
     resources:
       limits:
-        nvidia.com/gpu: "1"
-        memory: "16G"
+        nvidia.com/gpu: "2"
+        memory: "32G"
         cpu: "16"
       requests:
-        nvidia.com/gpu: "1"
-        memory: "1G"
+        nvidia.com/gpu: "2"
+        memory: "32G"
         cpu: "12"
   restartPolicy: Never
   # affinity:

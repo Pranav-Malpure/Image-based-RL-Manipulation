@@ -733,10 +733,11 @@ if __name__ == "__main__":
         eval_obs = aug(eval_obs)
     # print("Action actor: ", actor.get_eval_action(eval_obs))
     if args.checkpoint is not None:
-        ckpt = torch.load(args.checkpoint)
+        ckpt = torch.load(args.checkpoint, weights_only=True)
         actor.load_state_dict(ckpt['actor'])
         qf1.load_state_dict(ckpt['qf1'])
         qf2.load_state_dict(ckpt['qf2'])
+        
     qf1_target.load_state_dict(qf1.state_dict())
     qf2_target.load_state_dict(qf2.state_dict())
     q_optimizer = optim.Adam(
@@ -812,6 +813,12 @@ if __name__ == "__main__":
                     'qf1': qf1_target.state_dict(),
                     'qf2': qf2_target.state_dict(),
                     'log_alpha': log_alpha,
+                    'qf1_target': qf1_target.state_dict(),
+                    'qf2_target': qf2_target.state_dict(),
+                    'optimizer_actor': actor_optimizer.state_dict(),
+                    'optimizer_qf1': q_optimizer.state_dict(),
+                    'episode': num_episodes,  # For example, to track episodes or steps
+                    'steps': global_step
                 }, model_path)
                 print(f"model saved to {model_path}")
 
