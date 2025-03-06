@@ -21,9 +21,10 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 import tyro
+from mani_skill.utils.visualization.misc import tile_images
 
 import mani_skill.envs
-
+import multiprocessing
 
 @dataclass
 class Args:
@@ -550,15 +551,37 @@ class Actor(nn.Module):
 
 
 class Logger:
-    def __init__(self, log_wandb=False, tensorboard: SummaryWriter = None) -> None:
+    def __init__(self, log_wandb=False, tensorboard: SummaryWriter = None, manager=None) -> None:
         self.writer = tensorboard
         self.log_wandb = log_wandb
     def add_scalar(self, tag, scalar_value, step):
         if self.log_wandb:
             wandb.log({tag: scalar_value}, step=step)
         self.writer.add_scalar(tag, scalar_value, step)
+
+    def add_video(self, tag, vid_tensor, step):
+        if self.log_wandb:
+            pass
     def close(self):
         self.writer.close()
+
+    # def add_wandb_video(self, frames: np.ndarray): # (num_envs, num_frames, h, w, 3)
+    #     with self.lock:
+    #         if len(frames) > 0:
+    #             self.wandb_videos.extend(frames)
+            
+    # def log_wandb_video(self, step, fps=15, key='videos/eval_video'):
+    #     with self.lock:
+    #         if len(self.wandb_videos) > 0 :
+    #             nrows = int(np.sqrt(len(self.wandb_videos)))
+    #             wandb_video = np.stack(self.wandb_videos)
+    #             wandb_video = wandb_video.transpose(1, 0, 2, 3, 4)
+    #             wandb_video = [tile_images(rgbs, nrows=nrows) for rgbs in wandb_video]
+    #             wandb_video = np.stack(wandb_video)
+    #             self.wandb_videos[:] = []
+    #             return wandb.log(
+    #                 {key: wandb.Video(wandb_video.transpose(0, 3, 1, 2), fps=fps, format='mp4')}, step=step
+    #             )
 
 
 if __name__ == "__main__":
@@ -631,7 +654,8 @@ if __name__ == "__main__":
         if args.save_train_video_freq is not None:
             save_video_trigger = lambda x : (x // args.num_steps) % args.save_train_video_freq == 0
             envs = RecordEpisode(envs, output_dir=f"runs/{run_name}/train_videos", save_trajectory=False, save_video_trigger=save_video_trigger, max_steps_per_video=args.num_steps, video_fps=30)
-        eval_envs = RecordEpisode(eval_envs, output_dir=eval_output_dir, save_trajectory=args.save_trajectory, save_video=args.capture_video, trajectory_name="trajectory", max_steps_per_video=args.num_eval_steps, video_fps=30)
+        # eval_envs = RecordEpisode(eval_envs, output_dir=eval_output_dir, save_trajectory=args.save_trajectory, save_video=args.capture_video, trajectory_name="trajectory", max_steps_per_video=args.num_eval_steps, video_fps=30)
+        eval_envs = RecordEpisode(eval_envs, output_dir=eval_output_dir, save_trajectory=args.save_trajectory, save_video=args.capture_video, trajectory_name="trajectory", max_steps_per_video=args.num_eval_steps, video_fps=30, wandb_video_freq=args.wandb_video_freq//args.eval_freq)
     envs = ManiSkillVectorEnv(envs, args.num_envs, ignore_terminations=not args.partial_reset, record_metrics=True)
     eval_envs = ManiSkillVectorEnv(eval_envs, args.num_eval_envs, ignore_terminations=not args.eval_partial_reset, record_metrics=True)
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
@@ -662,7 +686,7 @@ if __name__ == "__main__":
             "hyperparameters",
             "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
         )
-        logger = Logger(log_wandb=args.track, tensorboard=writer)
+        logger = Logger(log_wandb=args.track, tensorboard=writer, manager=multiprocessing.Manager())
     else:
         print("Running evaluation")
 

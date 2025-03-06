@@ -23,6 +23,7 @@ from torch.utils.tensorboard import SummaryWriter
 import tyro
 
 import mani_skill.envs
+from sada_augmentations import compose_augs
 
 
 @dataclass
@@ -331,7 +332,7 @@ def make_mlp(in_channels, mlp_channels, act_builder=nn.ReLU, last_act=True):
         c_in = c_out
     return nn.Sequential(*module_list)
 
-class SoftQNetwork(nn.Module):
+class SoftQNetwork(nn.Module): # acts like a critic
     def __init__(self, envs, encoder: EncoderObsWrapper):
         super().__init__()
         self.encoder = encoder
@@ -394,7 +395,7 @@ class Actor(nn.Module):
             visual_feature = visual_feature.detach()
         x = torch.cat([visual_feature, obs['state']], dim=1)
         h = self.trunk(x)
-        return self.mlp(h), visual_feature
+        return self.mlp(h).chunk(2, dim=-1), visual_feature
 
     def forward(self, obs, detach_encoder=False):
         x, visual_feature = self.get_feature(obs, detach_encoder)
@@ -498,6 +499,7 @@ if __name__ == "__main__":
 
     # data augmentation
     aug = RandomShiftsAug(pad=4)
+    apply_strong_augmentations = compose_augs(args.strong_augmentations) #TODO: add args for strong augmentations
 
     if isinstance(envs.action_space, gym.spaces.Dict):
         envs = FlattenActionSpaceWrapper(envs)
@@ -558,7 +560,9 @@ if __name__ == "__main__":
     eval_obs, _ = eval_envs.reset(seed=args.seed)
     # print("OBS ", obs)
     obs = aug(obs)
+    obs_strong = apply_strong_augmentations(obs)
     eval_obs = aug(eval_obs)
+    eval_obs_strong = apply_strong_augmentations(eval_obs)
 
     # architecture is all actor, q-networks share the same vision encoder. Output of encoder is concatenates with any state data followed by separate MLPs.
     actor = Actor(envs, sample_obs=obs).to(device)
@@ -566,6 +570,12 @@ if __name__ == "__main__":
     qf2 = SoftQNetwork(envs, actor.encoder).to(device)
     qf1_target = SoftQNetwork(envs, actor.encoder).to(device)
     qf2_target = SoftQNetwork(envs, actor.encoder).to(device)
+
+    reg_qf1, aug_qf1 = qf1.chunk(2, dim=0)
+    reg_qf2, aug_qf2 = qf2.chunk(2, dim=0)
+
+    reg_q = torch.cat([reg_qf1, reg_qf2], dim=0)
+    aug_q = torch.cat([aug_qf1, aug_qf2], dim=0)
 
     # actor = Actor(envs, sample_obs=obs)
     # qf1 = SoftQNetwork(envs, actor.encoder)
@@ -618,11 +628,13 @@ if __name__ == "__main__":
             stime = time.perf_counter()
             eval_obs, _ = eval_envs.reset()
             eval_obs = aug(eval_obs)
+            eval_strong_obs = apply_strong_augmentations(eval_obs.clone())
             eval_metrics = defaultdict(list)
             num_episodes = 0
             for _ in range(args.num_eval_steps):
                 with torch.no_grad():
-                    eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = eval_envs.step(actor.get_eval_action(aug(eval_obs)))
+                    # eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = eval_envs.step(actor.get_eval_action(aug(eval_obs)))
+                    eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = eval_envs.step(actor.get_eval_action(torch.cat([aug(obs), apply_strong_augmentations(aug(obs.clone()))], dim=0)))
                     if "final_info" in eval_infos:
                         mask = eval_infos["_final_info"]
                         num_episodes += mask.sum()
@@ -718,11 +730,25 @@ if __name__ == "__main__":
                 next_q_value = data.rewards.flatten() + (1 - data.dones.flatten()) * args.gamma * (min_qf_next_target).view(-1)
                 # data.dones is "stop_bootstrap", which is computed earlier according to args.bootstrap_at_done
             visual_feature = actor.encoder(data.obs)
-            qf1_a_values = qf1(data.obs, data.actions, visual_feature).view(-1)
-            qf2_a_values = qf2(data.obs, data.actions, visual_feature).view(-1)
-            qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
-            qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
+
+
+            qf1_a_reg = reg_qf1(data.obs, data.actions, visual_feature).view(-1)
+            qf2_a_reg = reg_qf2(data.obs, data.actions, visual_feature).view(-1)
+            qf1_a_aug = aug_qf1(data.obs, data.actions, visual_feature).view(-1)
+            qf2_a_aug = aug_qf2(data.obs, data.actions, visual_feature).view(-1)
+            qf1_a_reg_loss = F.mse_loss(qf1_a_reg, next_q_value)
+            qf2_a_reg_loss = F.mse_loss(qf2_a_reg, next_q_value)
+            qf1_a_aug_loss = F.mse_loss(qf1_a_aug, next_q_value)
+            qf2_a_aug_loss = F.mse_loss(qf2_a_aug, next_q_value)
+            qf1_loss  = (qf1_a_reg_loss + qf1_a_aug_loss)*0.5
+            qf2_loss  = (qf2_a_reg_loss + qf2_a_aug_loss)*0.5
             qf_loss = qf1_loss + qf2_loss
+
+            # qf1_a_values = qf1(data.obs, data.actions, visual_feature).view(-1)
+            # qf2_a_values = qf2(data.obs, data.actions, visual_feature).view(-1)
+            # qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
+            # qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
+            # qf_loss = qf1_loss + qf2_loss
 
             q_optimizer.zero_grad()
             qf_loss.backward()
