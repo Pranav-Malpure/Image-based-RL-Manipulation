@@ -732,20 +732,25 @@ if __name__ == "__main__":
     if use_augmentation:
         eval_obs = aug(eval_obs)
     # print("Action actor: ", actor.get_eval_action(eval_obs))
-    if args.checkpoint is not None:
-        ckpt = torch.load(args.checkpoint, weights_only=True)
-        actor.load_state_dict(ckpt['actor'])
-        qf1.load_state_dict(ckpt['qf1'])
-        qf2.load_state_dict(ckpt['qf2'])
-        
-    qf1_target.load_state_dict(qf1.state_dict())
-    qf2_target.load_state_dict(qf2.state_dict())
     q_optimizer = optim.Adam(
         list(qf1.mlp.parameters()) +
         list(qf2.mlp.parameters()) +
         list(qf1.encoder.parameters()),
         lr=args.q_lr)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
+
+    if args.checkpoint is not None:
+        ckpt = torch.load(args.checkpoint, weights_only=True)
+        actor.load_state_dict(ckpt['actor'])
+        qf1.load_state_dict(ckpt['qf1'])
+        qf2.load_state_dict(ckpt['qf2'])
+        qf1_target.load_state_dict(ckpt['qf1_target'])
+        qf2_target.load_state_dict(ckpt['qf2_target'])
+        actor_optimizer.load_state_dict(ckpt['actor_optimizer'])
+        q_optimizer.load_state_dict(ckpt['q_optimizer'])
+    else:    
+        qf1_target.load_state_dict(qf1.state_dict())
+        qf2_target.load_state_dict(qf2.state_dict())
 
     # Automatic entropy tuning
     if args.autotune:
@@ -810,8 +815,8 @@ if __name__ == "__main__":
                 model_path = f"runs/{run_name}/ckpt_{global_step}.pt"
                 torch.save({
                     'actor': actor.state_dict(),
-                    'qf1': qf1_target.state_dict(),
-                    'qf2': qf2_target.state_dict(),
+                    'qf1': qf1.state_dict(),
+                    'qf2': qf2.state_dict(),
                     'log_alpha': log_alpha,
                     'qf1_target': qf1_target.state_dict(),
                     'qf2_target': qf2_target.state_dict(),
