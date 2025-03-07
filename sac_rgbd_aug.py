@@ -567,24 +567,6 @@ class Logger:
     def close(self):
         self.writer.close()
 
-    # def add_wandb_video(self, frames: np.ndarray): # (num_envs, num_frames, h, w, 3)
-    #     with self.lock:
-    #         if len(frames) > 0:
-    #             self.wandb_videos.extend(frames)
-            
-    # def log_wandb_video(self, step, fps=15, key='videos/eval_video'):
-    #     with self.lock:
-    #         if len(self.wandb_videos) > 0 :
-    #             nrows = int(np.sqrt(len(self.wandb_videos)))
-    #             wandb_video = np.stack(self.wandb_videos)
-    #             wandb_video = wandb_video.transpose(1, 0, 2, 3, 4)
-    #             wandb_video = [tile_images(rgbs, nrows=nrows) for rgbs in wandb_video]
-    #             wandb_video = np.stack(wandb_video)
-    #             self.wandb_videos[:] = []
-    #             return wandb.log(
-    #                 {key: wandb.Video(wandb_video.transpose(0, 3, 1, 2), fps=fps, format='mp4')}, step=step
-    #             )
-
 
 if __name__ == "__main__":
     
@@ -746,8 +728,8 @@ if __name__ == "__main__":
         qf2.load_state_dict(ckpt['qf2'])
         qf1_target.load_state_dict(ckpt['qf1_target'])
         qf2_target.load_state_dict(ckpt['qf2_target'])
-        actor_optimizer.load_state_dict(ckpt['actor_optimizer'])
-        q_optimizer.load_state_dict(ckpt['q_optimizer'])
+        actor_optimizer.load_state_dict(ckpt['optimizer_actor'])
+        q_optimizer.load_state_dict(ckpt['optimizer_qf1'])
     else:    
         qf1_target.load_state_dict(qf1.state_dict())
         qf2_target.load_state_dict(qf2.state_dict())
