@@ -35,7 +35,7 @@ class Args:
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
     cuda: bool = True
     """if toggled, cuda will be enabled by default"""
-    track: bool = False
+    track: bool = True
     """if toggled, this experiment will be tracked with Weights and Biases"""
     wandb_project_name: str = "ManiSkill"
     """the wandb's project name"""
@@ -55,6 +55,8 @@ class Args:
     """path to a pretrained checkpoint file to start evaluation/training from"""
     log_freq: int = 1_000
     """logging frequency in terms of environment steps"""
+    wandb_video_freq: int = 10000
+    """frequency to log videos to wandb in terms of environment steps (multiple of eval_freq)"""
 
     # Environment specific arguments
     env_id: str = "PickCube-v1"
