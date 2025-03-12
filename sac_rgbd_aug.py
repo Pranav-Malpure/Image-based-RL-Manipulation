@@ -70,7 +70,7 @@ class Args:
     """the type of environment vectorization to use"""
     num_envs: int = 2
     """the number of parallel environments"""
-    num_eval_envs: int = 2
+    num_eval_envs: int = 8
     """the number of parallel evaluation environments"""
     partial_reset: bool = False
     """whether to let parallel environments reset upon termination instead of truncation"""
@@ -743,6 +743,8 @@ if __name__ == "__main__":
     else:
         alpha = args.alpha
 
+    if args.checkpoint is not None:
+        log_alpha = ckpt['log_alpha']
     global_step = 0
     global_update = 0
     learning_has_started = False

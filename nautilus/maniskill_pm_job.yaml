@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: maniskill-pm-job
+  name: maniskill-pm-job-3
 spec:
   template:
     metadata:
@@ -18,17 +18,17 @@ spec:
           resources:
             limits:
               nvidia.com/gpu: "1"
-              memory: "150G"
+              memory: "32G"
               cpu: "32"
             requests:
               nvidia.com/gpu: "1"
-              memory: "128G"
+              memory: "28G"
               cpu: "24"
       restartPolicy: Never
       affinity:
         nodeAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 80
+            - weight: 100
               preference:
                 matchExpressions:
                   - key: nvidia.com/gpu.product
@@ -38,7 +38,7 @@ spec:
                       - "NVIDIA-A100-SXM4-80GB"
                       - "NVIDIA-GeForce-RTX-4090"
                       - "NVIDIA-GeForce-RTX-3090"
-            - weight: 15
+            - weight: 1
               preference:
                 matchExpressions:
                   - key: nvidia.com/gpu.product
@@ -47,7 +47,7 @@ spec:
                       - "NVIDIA-A40"
                       - "NVIDIA-A10"
                       - "Tesla-V100-SXM2-32GB"
-            - weight: 5
+            - weight: 1
               preference:
                 matchExpressions:
                   - key: nvidia.com/gpu.product
@@ -61,11 +61,38 @@ spec:
                   - key: kubernetes.io/hostname
                     operator: In
                     values:
+                      - "ry-gpu-1.sdsc.optiputer.net"
+                      - "ry-gpu-2.sdsc.optiputer.net"
+                      - "ry-gpu-3.sdsc.optiputer.net"
+                      - "ry-gpu-4.sdsc.optiputer.net"
+                      - "ry-gpu-5.sdsc.optiputer.net"
+                      - "ry-gpu-6.sdsc.optiputer.net"
+                      - "ry-gpu-7.sdsc.optiputer.net"
+                      - "ry-gpu-8.sdsc.optiputer.net"
+                      - "ry-gpu-9.sdsc.optiputer.net"
                       - "ry-gpu-10.sdsc.optiputer.net"
+                      - "ry-gpu-11.sdsc.optiputer.net"
+                      - "ry-gpu-12.sdsc.optiputer.net"
+                      - "ry-gpu-13.sdsc.optiputer.net"
+                      - "ry-gpu-14.sdsc.optiputer.net"
+                      - "ry-gpu-15.sdsc.optiputer.net"
+                      - "k8s-gpu-01.sdsc.optiputer.net"
+                      - "k8s-gpu-02.sdsc.optiputer.net"
                       - "k8s-gpu-03.sdsc.optiputer.net"
+                      - "k8s-gpu-04.sdsc.optiputer.net"
+                      - "k8s-gpu-05.sdsc.optiputer.net"
+                      - "k8s-gpu-06.sdsc.optiputer.net"
+                      - "k8s-gpu-07.sdsc.optiputer.net"
+                      - "k8s-gpu-08.sdsc.optiputer.net"
+                      - "k8s-gpu-09.sdsc.optiputer.net"
+                      - "k8s-gpu-10.sdsc.optiputer.net"
+                      - "k8s-gpu-11.sdsc.optiputer.net"
+                      - "k8s-gpu-12.sdsc.optiputer.net"
+                      - "k8s-gpu-13.sdsc.optiputer.net"
+                      - "k8s-gpu-14.sdsc.optiputer.net"
+                      - "k8s-gpu-15.sdsc.optiputer.net"
       volumes:
         - name: pm-slow-vol2
           persistentVolumeClaim:
             claimName: pm-slow-vol2
   backoffLimit: 4  # Limits the number of retries in case the job fails
-  activeDeadlineSeconds: 86400  # Time in seconds, e.g., 86400s = 1 day
