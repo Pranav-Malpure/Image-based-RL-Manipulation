@@ -19,11 +19,11 @@ spec:
             limits:
               nvidia.com/gpu: "1"
               memory: "32G"
-              cpu: "32"
+              cpu: "16"
             requests:
               nvidia.com/gpu: "1"
-              memory: "28G"
-              cpu: "24"
+              memory: "32G"
+              cpu: "12"
       restartPolicy: Never
       affinity:
         nodeAffinity:

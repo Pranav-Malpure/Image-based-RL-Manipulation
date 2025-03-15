@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: maniskill-pm-pod2
+  name: maniskill-pm-pod2-force
 spec:
   containers:
   - name: gpu-container
@@ -20,7 +20,7 @@ spec:
       requests:
         nvidia.com/gpu: "1"
         memory: "32G"
-        cpu: "8"
+        cpu: "12"
   restartPolicy: Never
   # affinity:
   #   nodeAffinity:
