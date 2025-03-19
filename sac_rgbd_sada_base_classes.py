@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import utils
-import augmentations
+import sada_augmentations as augmentations
 
 
 class Encoder(nn.Module):

@@ -38,7 +38,7 @@ class Args:
     """if toggled, cuda will be enabled by default"""
     track: bool = True
     """if toggled, this experiment will be tracked with Weights and Biases"""
-    wandb_project_name: str = "testing"
+    wandb_project_name: str = "Augmentations runs"
     """the wandb's project name"""
     wandb_entity: Optional[str] = "pranavmalpure-uc-san-diego-health"
     """the entity (team) of wandb's project"""
@@ -589,7 +589,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-    use_augmentation = False
+    use_augmentation = True
     ####### Environment setup #######
     env_kwargs = dict(obs_mode=args.obs_mode, render_mode=args.render_mode, robot_uids = args.robot_uids, sim_backend="gpu", sensor_configs=dict())
     if args.control_mode is not None:

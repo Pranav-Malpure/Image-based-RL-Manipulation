@@ -11,7 +11,7 @@ spec:
         - name: gpu-container
           image: dhbhatt/maniskill-experiments:latest
           command: ["/bin/bash", "-c"]
-          args: ["-c", "tail -f /dev/null"]
+          args: []
           volumeMounts:
             - mountPath: /pers_vol
               name: pm-slow-vol2
