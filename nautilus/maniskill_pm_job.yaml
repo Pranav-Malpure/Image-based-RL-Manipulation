@@ -10,8 +10,7 @@ spec:
       containers:
         - name: gpu-container
           image: dhbhatt/maniskill-experiments:latest
-          command: ["/bin/bash", "-c"]
-          args: []
+          command: ["/bin/bash", "./Image-based-RL-Manipulation/setup.sh"]
           volumeMounts:
             - mountPath: /pers_vol
               name: pm-slow-vol2
