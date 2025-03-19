@@ -620,7 +620,7 @@ if __name__ == "__main__":
 
     # data augmentation
     aug = RandomShiftsAug(pad=4)
-    use_augmentation = False
+    use_augmentation = True
     if isinstance(envs.action_space, gym.spaces.Dict):
         envs = FlattenActionSpaceWrapper(envs)
         eval_envs = FlattenActionSpaceWrapper(eval_envs)
