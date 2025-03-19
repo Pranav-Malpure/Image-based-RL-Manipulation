@@ -10,7 +10,17 @@ spec:
       containers:
         - name: gpu-container
           image: dhbhatt/maniskill-experiments:latest
-          command: ["/bin/bash", "./Image-based-RL-Manipulation/setup.sh"]
+          command: ["/bin/bash"]
+          args: 
+            - "-c"
+            - |
+              rm -rf mani_skill/ && \
+              git clone --recurse-submodules https://github.com/Pranav-Malpure/Image-based-RL-Manipulation && \
+              cd Image-based-RL-Manipulation/ManiSkill && \
+              git checkout xarm_allegro && \
+              mv mani_skill/ /workspace/ManiSkill/ && \
+              cd .. && \
+              python sac_rgbd_aug.py --env_id="PickCube-v1" --obs_mode="rgb" --num_envs=32 --utd=0.5 --buffer_size=150_000 --control-mode="pd_ee_delta_pos" --camera_width=64 --camera_height=64 --total_timesteps=500_000 --eval_freq=10_000
           volumeMounts:
             - mountPath: /pers_vol
               name: pm-slow-vol2
