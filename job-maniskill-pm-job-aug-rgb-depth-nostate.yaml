@@ -1,0 +1,127 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  creationTimestamp: "2025-03-19T10:46:27Z"
+  generation: 1
+  labels:
+    batch.kubernetes.io/controller-uid: dd81480a-bd1d-44ba-9282-8484b59397b6
+    batch.kubernetes.io/job-name: maniskill-pm-job-aug-rgb-depth-nostate
+    controller-uid: dd81480a-bd1d-44ba-9282-8484b59397b6
+    job-name: maniskill-pm-job-aug-rgb-depth-nostate
+  name: maniskill-pm-job-aug-rgb-depth-nostate
+  namespace: erl-ucsd-supp
+  resourceVersion: "9877590835"
+  uid: dd81480a-bd1d-44ba-9282-8484b59397b6
+spec:
+  backoffLimit: 4
+  completionMode: NonIndexed
+  completions: 1
+  parallelism: 1
+  selector:
+    matchLabels:
+      batch.kubernetes.io/controller-uid: dd81480a-bd1d-44ba-9282-8484b59397b6
+  suspend: false
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        batch.kubernetes.io/controller-uid: dd81480a-bd1d-44ba-9282-8484b59397b6
+        batch.kubernetes.io/job-name: maniskill-pm-job-aug-rgb-depth-nostate
+        controller-uid: dd81480a-bd1d-44ba-9282-8484b59397b6
+        job-name: maniskill-pm-job-aug-rgb-depth-nostate
+      name: maniskill-pm-pod
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - preference:
+              matchExpressions:
+              - key: nvidia.com/gpu.product
+                operator: In
+                values:
+                - NVIDIA-A100-80GB-PCIe
+                - NVIDIA-A100-SXM4-80GB
+                - NVIDIA-GeForce-RTX-4090
+                - NVIDIA-GeForce-RTX-3090
+            weight: 100
+          - preference:
+              matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                - ry-gpu-1.sdsc.optiputer.net
+                - ry-gpu-2.sdsc.optiputer.net
+                - ry-gpu-3.sdsc.optiputer.net
+                - ry-gpu-4.sdsc.optiputer.net
+                - ry-gpu-5.sdsc.optiputer.net
+                - ry-gpu-6.sdsc.optiputer.net
+                - ry-gpu-7.sdsc.optiputer.net
+                - ry-gpu-8.sdsc.optiputer.net
+                - ry-gpu-9.sdsc.optiputer.net
+                - ry-gpu-10.sdsc.optiputer.net
+                - ry-gpu-11.sdsc.optiputer.net
+                - ry-gpu-12.sdsc.optiputer.net
+                - ry-gpu-13.sdsc.optiputer.net
+                - ry-gpu-14.sdsc.optiputer.net
+                - ry-gpu-15.sdsc.optiputer.net
+                - k8s-gpu-01.sdsc.optiputer.net
+                - k8s-gpu-02.sdsc.optiputer.net
+                - k8s-gpu-03.sdsc.optiputer.net
+                - k8s-gpu-04.sdsc.optiputer.net
+                - k8s-gpu-05.sdsc.optiputer.net
+                - k8s-gpu-06.sdsc.optiputer.net
+                - k8s-gpu-07.sdsc.optiputer.net
+                - k8s-gpu-08.sdsc.optiputer.net
+                - k8s-gpu-09.sdsc.optiputer.net
+                - k8s-gpu-10.sdsc.optiputer.net
+                - k8s-gpu-11.sdsc.optiputer.net
+                - k8s-gpu-12.sdsc.optiputer.net
+                - k8s-gpu-13.sdsc.optiputer.net
+                - k8s-gpu-14.sdsc.optiputer.net
+                - k8s-gpu-15.sdsc.optiputer.net
+            weight: 100
+      containers:
+      - args:
+        - -c
+        - |
+          rm -rf mani_skill/ && \
+          git clone --recurse-submodules https://github.com/Pranav-Malpure/Image-based-RL-Manipulation && \
+          cd Image-based-RL-Manipulation/ManiSkill && \
+          git checkout xarm_allegro && \
+          mv mani_skill/ /workspace/ManiSkill/ && \
+          cd .. && \
+          python sac_rgbd_aug_no_state.py --env_id="PickCube-v1" --obs_mode rgb+depth --num_envs=16 --utd=0.5 --buffer_size=150_000 --control-mode="pd_ee_delta_pos" --camera_width=64 --camera_height=64 --total_timesteps=1_000_000 --eval_freq=10_000
+        command:
+        - /bin/bash
+        image: dhbhatt/maniskill-experiments:latest
+        imagePullPolicy: Always
+        name: gpu-container
+        resources:
+          limits:
+            cpu: "16"
+            memory: 32G
+            nvidia.com/gpu: "1"
+          requests:
+            cpu: "16"
+            memory: 32G
+            nvidia.com/gpu: "1"
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /pers_vol
+          name: pm-slow-vol2
+      dnsPolicy: ClusterFirst
+      restartPolicy: Never
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: pm-slow-vol2
+        persistentVolumeClaim:
+          claimName: pm-slow-vol2
+  ttlSecondsAfterFinished: 86400
+status:
+  active: 1
+  ready: 1
+  startTime: "2025-03-19T10:46:27Z"
+  uncountedTerminatedPods: {}

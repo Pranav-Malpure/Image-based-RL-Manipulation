@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: maniskill-pm-pod
+  name: maniskill-pm-pod-rgb-nostate
 spec:
   containers:
   - name: gpu-container
@@ -16,7 +16,7 @@ spec:
         git checkout xarm_allegro && \
         mv mani_skill/ /workspace/ManiSkill/ && \
         cd .. && \
-        python sac_rgbd_aug.py --env_id="PickCube-v1" --obs_mode rgb --num_envs=32 --utd=0.5 --buffer_size=150_000 --control-mode="pd_ee_delta_pos" --camera_width=64 --camera_height=64 --total_timesteps=500_000 --eval_freq=10_000
+        python sac_rgbd_aug_no_state.py --env_id="PickCube-v1" --obs_mode rgb+depth --num_envs=16 --utd=0.5 --buffer_size=150_000 --control-mode="pd_ee_delta_pos" --camera_width=64 --camera_height=64 --total_timesteps=500_000 --eval_freq=10_000
     volumeMounts:
     - mountPath: /pers_vol
       name: pm-slow-vol2
