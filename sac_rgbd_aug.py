@@ -710,9 +710,7 @@ if __name__ == "__main__":
     # qf2 = nn.DataParallel(qf2)
     # qf1_target = nn.DataParallel(qf1_target)
     # qf2_target = nn.DataParallel(qf2_target)
-    eval_obs, _ = eval_envs.reset()
-    if use_augmentation:
-        eval_obs = aug(eval_obs)
+
     # print("Action actor: ", actor.get_eval_action(eval_obs))
     q_optimizer = optim.Adam(
         list(qf1.mlp.parameters()) +

@@ -620,7 +620,7 @@ if __name__ == "__main__":
 
     # data augmentation
     aug = RandomShiftsAug(pad=4)
-
+    use_augmentation = False
     if isinstance(envs.action_space, gym.spaces.Dict):
         envs = FlattenActionSpaceWrapper(envs)
         eval_envs = FlattenActionSpaceWrapper(eval_envs)
@@ -681,8 +681,9 @@ if __name__ == "__main__":
     obs, info = envs.reset(seed=args.seed) # in Gymnasium, seed is given to reset() instead of seed()
     eval_obs, _ = eval_envs.reset(seed=args.seed)
     # print("OBS ", obs)
-    obs = aug(obs)
-    eval_obs = aug(eval_obs)
+    if use_augmentation:
+        obs = aug(obs)
+        eval_obs = aug(eval_obs)
 
     # architecture is all actor, q-networks share the same vision encoder. Output of encoder is concatenates with any state data followed by separate MLPs.
     actor = Actor(envs, sample_obs=obs).to(device)
@@ -741,12 +742,16 @@ if __name__ == "__main__":
             actor.eval()
             stime = time.perf_counter()
             eval_obs, _ = eval_envs.reset()
-            eval_obs = aug(eval_obs)
+            if use_augmentation:
+                eval_obs = aug(eval_obs)
             eval_metrics = defaultdict(list)
             num_episodes = 0
             for _ in range(args.num_eval_steps):
                 with torch.no_grad():
-                    eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = eval_envs.step(actor.get_eval_action(aug(eval_obs)))
+                    if use_augmentation:
+                        eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = eval_envs.step(actor.get_eval_action(aug(eval_obs)))
+                    else:
+                        eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = eval_envs.step(actor.get_eval_action(aug(eval_obs)))
                     if "final_info" in eval_infos:
                         mask = eval_infos["_final_info"]
                         num_episodes += mask.sum()
@@ -791,7 +796,10 @@ if __name__ == "__main__":
             if not learning_has_started:
                 actions = torch.tensor(envs.action_space.sample(), dtype=torch.float32, device=device)
             else:
-                actions, _, _, _ = actor.get_action(aug(obs))
+                if use_augmentation:
+                    actions, _, _, _ = actor.get_action(aug(obs))
+                else:
+                    actions, _, _, _ = actor.get_action(aug(obs))
                 actions = actions.detach()
 
             # TRY NOT TO MODIFY: execute the game and log data.
