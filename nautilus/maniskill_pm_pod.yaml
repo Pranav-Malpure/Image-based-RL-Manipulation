@@ -1,19 +1,15 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: maniskill-pm-pod-dp3-1
+  name: maniskill-pm-pod-diffusion
 spec:
+  # runtimeClassName: nvidia
   containers:
   - name: gpu-container
-    image: dhbhatt/maniskill-experiments:latest
+    image:  nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
     command: ["/bin/bash", "-c"]
     args: 
       - |
-        rm -rf mani_skill/ && \
-        git clone --recurse-submodules https://github.com/Pranav-Malpure/Image-based-RL-Manipulation && \
-        cd Image-based-RL-Manipulation/ManiSkill && \
-        git checkout xarm_allegro && \
-        mv mani_skill/ /workspace/ManiSkill/
         tail -f /dev/null 
     volumeMounts:
     - mountPath: /pers_vol
@@ -46,8 +42,7 @@ spec:
           - key: nvidia.com/gpu.product
             operator: In
             values:
-            - "NVIDIA-A100-80GB-PCIe"
-            - "NVIDIA-A100-SXM4-80GB"      
+            - "NVIDIA-L40"      
             - "NVIDIA-GeForce-RTX-4090"
             - "NVIDIA-GeForce-RTX-3090"
       - weight: 1
@@ -107,3 +102,11 @@ spec:
     - name: pm-slow-vol2
       persistentVolumeClaim:
         claimName: pm-slow-vol2
+
+#rm -rf mani_skill/ && \
+        # git clone --recurse-submodules https://github.com/Pranav-Malpure/Image-based-RL-Manipulation && \
+        # cd Image-based-RL-Manipulation/ManiSkill && \
+        # git checkout xarm_allegro && \
+        # mv mani_skill/ /workspace/ManiSkill/
+
+        # nvidia/cuda:11.8.0-devel-ubuntu22.04
