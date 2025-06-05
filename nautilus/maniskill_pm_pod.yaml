@@ -1,12 +1,12 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: maniskill-pm-pod-diffusion
+  name: maniskill-pm-pod-diffusion-2
 spec:
   # runtimeClassName: nvidia
   containers:
   - name: gpu-container
-    image:  nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+    image: dhbhatt/maniskill-experiments:latest
     command: ["/bin/bash", "-c"]
     args: 
       - |
@@ -110,3 +110,4 @@ spec:
         # mv mani_skill/ /workspace/ManiSkill/
 
         # nvidia/cuda:11.8.0-devel-ubuntu22.04
+        # nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04 

@@ -8,6 +8,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 import tyro
+from diffusion_policy_3d.diffusion_policy_3d.diffusion_policy_3d.policy.dp3 import DP3 as DP3Policy
+from diffusion_policy_3d.diffusion_policy_3d.diffusion_policy_3d.config import dp3.yaml
 
 @dataclass
 class Args:
@@ -99,8 +101,14 @@ class DP3Encoder(nn.Module):
         return x
 
 
-
 def train():
+
+    diffusion_policy = DP3Policy()
+
+    pass
+
+
+
 
 
 
