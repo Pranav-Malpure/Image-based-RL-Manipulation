@@ -26,6 +26,64 @@ from mani_skill.utils.visualization.misc import tile_images
 import mani_skill.envs
 import multiprocessing
 
+def map_allegro_action(reduced_action):
+    """
+    Maps a 2D action to 16D allegro hand action.
+    reduced_action[0] -> joints 0-11 (index, middle, ring fingers)
+    reduced_action[1] -> joints 12-15 (thumb)
+    """
+    batch_size = reduced_action.shape[0]
+    full_action = torch.zeros((batch_size, 16), device=reduced_action.device, dtype=reduced_action.dtype)
+    
+    # Map first value to joints 0-11 (index, middle, ring fingers)
+    full_action[:, 0:12] = reduced_action[:, 0:1].repeat(1, 12)
+    
+    # Map second value to joints 12-15 (thumb)
+    full_action[:, 12:16] = reduced_action[:, 1:2].repeat(1, 4)
+    
+    return full_action
+
+def insert_fixed_joint(action_reduced, fixed_joint_idx=5, target_dim=None):
+    """
+    Inserts a zero at the specified joint index.
+    This is used when a joint is fixed to 0 but we want to save a parameter.
+    """
+    batch_size = action_reduced.shape[0]
+    input_dim = action_reduced.shape[1]
+    
+    if target_dim is None:
+        target_dim = input_dim + 1  # Default: add one dimension
+    
+    action_full = torch.zeros((batch_size, target_dim), device=action_reduced.device, dtype=action_reduced.dtype)
+    
+    # Copy actions before the fixed joint
+    action_full[:, :fixed_joint_idx] = action_reduced[:, :fixed_joint_idx]
+    # Fixed joint remains 0 (already initialized as zeros)
+    # Copy actions after the fixed joint
+    action_full[:, fixed_joint_idx+1:] = action_reduced[:, fixed_joint_idx:]
+    
+    return action_full
+
+def map_xarm_allegro_action(reduced_action):
+    """
+    Maps a 7D action to 22D xarm6+allegro action.
+    reduced_action[0:5] -> xarm joints 0-4 (skip joint 5 which is fixed)
+    reduced_action[5] -> allegro fingers 0-11 (index, middle, ring)
+    reduced_action[6] -> allegro thumb 12-15
+    """
+    batch_size = reduced_action.shape[0]
+    full_action = torch.zeros((batch_size, 22), device=reduced_action.device, dtype=reduced_action.dtype)
+    
+    # Map xarm joints 0-4
+    full_action[:, 0:5] = reduced_action[:, 0:5]
+    # xarm joint 5 remains 0 (index 5)
+    
+    # Map allegro joints: fingers (6-17) and thumb (18-21)
+    full_action[:, 6:18] = reduced_action[:, 5:6].repeat(1, 12)  # Index, middle, ring fingers
+    full_action[:, 18:22] = reduced_action[:, 6:7].repeat(1, 4)  # Thumb
+    
+    return full_action
+
 @dataclass
 class Args:
     exp_name: Optional[str] = None
@@ -134,6 +192,8 @@ class Args:
     """the height of the camera image. If none it will use the default the environment specifies."""
     robot_uids: str = "panda"
     """the robot uids to use. If none it will use the default the environment specifies."""
+    use_simplified_allegro: bool = True
+    """if toggled, uses simplified 2D control for allegro hand (2 values instead of 16)"""
 
     # to be filled in runtime
     grad_steps_per_iteration: int = 0
@@ -452,9 +512,12 @@ def make_mlp(in_channels, mlp_channels, act_builder=nn.ReLU, last_act=True):
     return nn.Sequential(*module_list)
 
 class SoftQNetwork(nn.Module):
-    def __init__(self, envs, encoder: EncoderObsWrapper):
+    def __init__(self, envs, encoder: EncoderObsWrapper, use_simplified_allegro=False):
         super().__init__()
         self.encoder = encoder
+        self.use_simplified_allegro = use_simplified_allegro
+        
+        # Use the full action dimension for Q-networks (they always receive mapped actions)
         action_dim = np.prod(envs.single_action_space.shape)
         state_dim = envs.single_observation_space['state'].shape[0]
 
@@ -478,9 +541,25 @@ LOG_STD_MAX = 2
 LOG_STD_MIN = -5
 
 class Actor(nn.Module):
-    def __init__(self, envs, sample_obs):
+    def __init__(self, envs, sample_obs, use_simplified_allegro=False):
         super().__init__()
-        action_dim = np.prod(envs.single_action_space.shape)
+        self.use_simplified_allegro = use_simplified_allegro
+        
+        # Determine action dimension based on robot type and optimization
+        full_action_dim = np.prod(envs.single_action_space.shape)
+        if use_simplified_allegro and full_action_dim == 16:  # Pure allegro hand
+            action_dim = 2  # Simplified control with 2 values
+        elif use_simplified_allegro and full_action_dim == 22:  # xarm6 + allegro
+            action_dim = 7  # 5 xarm (skip joint 5) + 2 simplified allegro
+        elif full_action_dim == 16:  # Pure allegro hand
+            action_dim = 15  # Remove the fixed joint from model output
+        elif full_action_dim == 22:  # xarm6 + allegro  
+            action_dim = 21  # Remove xarm joint 5 from model output
+        else:
+            action_dim = full_action_dim
+        
+        self.action_dim = action_dim
+        self.full_action_dim = full_action_dim
         state_dim = envs.single_observation_space['state'].shape[0]
         # count number of channels and image size
         in_channels = 0
@@ -505,8 +584,32 @@ class Actor(nn.Module):
         self.fc_mean = nn.Linear(256, action_dim)
         self.fc_logstd = nn.Linear(256, action_dim)
         # action rescaling
-        self.action_scale = torch.FloatTensor((envs.single_action_space.high - envs.single_action_space.low) / 2.0)
-        self.action_bias = torch.FloatTensor((envs.single_action_space.high + envs.single_action_space.low) / 2.0)
+        if self.use_simplified_allegro and full_action_dim == 16:
+            # Pure allegro hand with simplified control
+            action_high = torch.FloatTensor([1.0, 1.0])
+            action_low = torch.FloatTensor([-1.0, -1.0])
+        elif self.use_simplified_allegro and full_action_dim == 22:
+            # xarm6 + allegro with simplified control: 5 xarm + 2 allegro
+            action_high = torch.FloatTensor([1.0] * 7)
+            action_low = torch.FloatTensor([-1.0] * 7)
+        elif full_action_dim == 16 and action_dim == 15:
+            # Pure allegro hand: remove joint 5
+            env_high = torch.FloatTensor(envs.single_action_space.high)
+            env_low = torch.FloatTensor(envs.single_action_space.low)
+            action_high = torch.cat([env_high[:5], env_high[6:]])  # Skip index 5
+            action_low = torch.cat([env_low[:5], env_low[6:]])     # Skip index 5
+        elif full_action_dim == 22 and action_dim == 21:
+            # xarm6 + allegro: remove xarm joint 5
+            env_high = torch.FloatTensor(envs.single_action_space.high)
+            env_low = torch.FloatTensor(envs.single_action_space.low)
+            action_high = torch.cat([env_high[:5], env_high[6:]])  # Skip xarm joint 5
+            action_low = torch.cat([env_low[:5], env_low[6:]])     # Skip xarm joint 5
+        else:
+            action_high = torch.FloatTensor(envs.single_action_space.high)
+            action_low = torch.FloatTensor(envs.single_action_space.low)
+            
+        self.action_scale = torch.FloatTensor((action_high - action_low) / 2.0)
+        self.action_bias = torch.FloatTensor((action_high + action_low) / 2.0)
 
     def get_feature(self, obs, detach_encoder=False):
         visual_feature = self.encoder(obs)
@@ -528,7 +631,24 @@ class Actor(nn.Module):
     def get_eval_action(self, obs):
         mean, log_std, _ = self(obs)
         action = torch.tanh(mean) * self.action_scale + self.action_bias
-        # action[:,5] = 0
+        
+        # Map to full action space based on control mode
+        if self.use_simplified_allegro and self.full_action_dim == 16:
+            # Pure allegro hand with 2D control
+            action = map_allegro_action(action)
+        elif self.use_simplified_allegro and self.full_action_dim == 22:
+            # xarm6 + allegro with 7D control
+            action = map_xarm_allegro_action(action)
+        elif self.full_action_dim == 16 and self.action_dim == 15:
+            # Pure allegro hand: insert 0 at joint 5
+            action = insert_fixed_joint(action, fixed_joint_idx=5, target_dim=16)
+        elif self.full_action_dim == 22 and self.action_dim == 21:
+            # xarm6 + allegro: insert 0 at xarm joint 5
+            action = insert_fixed_joint(action, fixed_joint_idx=5, target_dim=22)
+        
+        # Ensure joint 5 is always 0 (covers xarm joint 5 in xarm setups)
+        if self.full_action_dim >= 22:
+            action[:,5] = 0
         return action
 
     def get_action(self, obs, detach_encoder=False):
@@ -543,7 +663,28 @@ class Actor(nn.Module):
         log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + 1e-6)
         log_prob = log_prob.sum(1, keepdim=True)
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
-        # action[:,5] = 0
+        
+        # Map to full action space based on control mode
+        if self.use_simplified_allegro and self.full_action_dim == 16:
+            # Pure allegro hand with 2D control
+            action = map_allegro_action(action)
+            mean = map_allegro_action(mean)
+        elif self.use_simplified_allegro and self.full_action_dim == 22:
+            # xarm6 + allegro with 7D control
+            action = map_xarm_allegro_action(action)
+            mean = map_xarm_allegro_action(mean)
+        elif self.full_action_dim == 16 and self.action_dim == 15:
+            # Pure allegro hand: insert 0 at joint 5
+            action = insert_fixed_joint(action, fixed_joint_idx=5, target_dim=16)
+            mean = insert_fixed_joint(mean, fixed_joint_idx=5, target_dim=16)
+        elif self.full_action_dim == 22 and self.action_dim == 21:
+            # xarm6 + allegro: insert 0 at xarm joint 5
+            action = insert_fixed_joint(action, fixed_joint_idx=5, target_dim=22)
+            mean = insert_fixed_joint(mean, fixed_joint_idx=5, target_dim=22)
+        
+        # Ensure joint 5 is always 0 (covers xarm joint 5 in xarm setups)
+        if self.full_action_dim >= 22:
+            action[:,5] = 0
         return action, log_prob, mean, visual_feature
 
     def to(self, device):
@@ -693,11 +834,11 @@ if __name__ == "__main__":
         eval_obs = aug(eval_obs)
 
     # architecture is all actor, q-networks share the same vision encoder. Output of encoder is concatenates with any state data followed by separate MLPs.
-    actor = Actor(envs, sample_obs=obs).to(device)
-    qf1 = SoftQNetwork(envs, actor.encoder).to(device)
-    qf2 = SoftQNetwork(envs, actor.encoder).to(device)
-    qf1_target = SoftQNetwork(envs, actor.encoder).to(device)
-    qf2_target = SoftQNetwork(envs, actor.encoder).to(device)
+    actor = Actor(envs, sample_obs=obs, use_simplified_allegro=args.use_simplified_allegro).to(device)
+    qf1 = SoftQNetwork(envs, actor.encoder, use_simplified_allegro=args.use_simplified_allegro).to(device)
+    qf2 = SoftQNetwork(envs, actor.encoder, use_simplified_allegro=args.use_simplified_allegro).to(device)
+    qf1_target = SoftQNetwork(envs, actor.encoder, use_simplified_allegro=args.use_simplified_allegro).to(device)
+    qf2_target = SoftQNetwork(envs, actor.encoder, use_simplified_allegro=args.use_simplified_allegro).to(device)
 
     # actor = Actor(envs, sample_obs=obs)
     # qf1 = SoftQNetwork(envs, actor.encoder)
@@ -734,7 +875,20 @@ if __name__ == "__main__":
 
     # Automatic entropy tuning
     if args.autotune:
-        target_entropy = -torch.prod(torch.Tensor(envs.single_action_space.shape).to(device)).item()
+        if args.use_simplified_allegro and actor.full_action_dim == 16:
+            # Pure allegro hand with 2D control
+            target_entropy = -torch.prod(torch.Tensor([2]).to(device)).item()
+        elif args.use_simplified_allegro and actor.full_action_dim == 22:
+            # xarm6 + allegro with 7D control
+            target_entropy = -torch.prod(torch.Tensor([7]).to(device)).item()
+        elif actor.full_action_dim == 16 and actor.action_dim == 15:
+            # Pure allegro hand with 15D control
+            target_entropy = -torch.prod(torch.Tensor([15]).to(device)).item()
+        elif actor.full_action_dim == 22 and actor.action_dim == 21:
+            # xarm6 + allegro with 21D control
+            target_entropy = -torch.prod(torch.Tensor([21]).to(device)).item()
+        else:
+            target_entropy = -torch.prod(torch.Tensor(envs.single_action_space.shape).to(device)).item()
         log_alpha = torch.zeros(1, requires_grad=True, device=device)
         alpha = log_alpha.exp().item()
         a_optimizer = optim.Adam([log_alpha], lr=args.q_lr)
@@ -816,9 +970,29 @@ if __name__ == "__main__":
 
             # ALGO LOGIC: put action logic here
             if not learning_has_started:
-                modified_env_action = envs.action_space.sample()
-                # modified_env_action[:,5] = 0
-                actions = torch.tensor(modified_env_action, dtype=torch.float32, device=device)
+                if args.use_simplified_allegro and actor.full_action_dim == 16:
+                    # Pure allegro hand: sample 2D actions and map to full space
+                    reduced_action = torch.rand((args.num_envs, 2), device=device) * 2.0 - 1.0
+                    actions = map_allegro_action(reduced_action)
+                elif args.use_simplified_allegro and actor.full_action_dim == 22:
+                    # xarm6 + allegro: sample 7D actions and map to full space
+                    reduced_action = torch.rand((args.num_envs, 7), device=device) * 2.0 - 1.0
+                    actions = map_xarm_allegro_action(reduced_action)
+                elif actor.full_action_dim == 16 and actor.action_dim == 15:
+                    # Pure allegro hand: sample 15D actions and insert 0 at joint 5
+                    action_15d = torch.rand((args.num_envs, 15), device=device) * 2.0 - 1.0
+                    actions = insert_fixed_joint(action_15d, fixed_joint_idx=5, target_dim=16)
+                elif actor.full_action_dim == 22 and actor.action_dim == 21:
+                    # xarm6 + allegro: sample 21D actions and insert 0 at joint 5
+                    action_21d = torch.rand((args.num_envs, 21), device=device) * 2.0 - 1.0
+                    actions = insert_fixed_joint(action_21d, fixed_joint_idx=5, target_dim=22)
+                else:
+                    modified_env_action = envs.action_space.sample()
+                    actions = torch.tensor(modified_env_action, dtype=torch.float32, device=device)
+                
+                # Ensure joint 5 is always 0 (covers xarm joint 5 in xarm setups)
+                if actor.full_action_dim >= 22:
+                    actions[:,5] = 0
             else:
                 if use_augmentation:
                     actions, _, _, _ = actor.get_action(aug(obs))
