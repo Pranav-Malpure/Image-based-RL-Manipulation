@@ -1,11 +1,11 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: maniskill-pm-job
+  name: maniskill-pm-job-2
 spec:
   template:
     metadata:
-      name: maniskill-pm-pod
+      name: maniskill-pm-pod-2
     spec:
       containers:
         - name: gpu-container
@@ -14,7 +14,14 @@ spec:
           args: 
             - "-c"
             - |
-              tail -f /dev/null
+              cd /workspace/ManiSkill &&
+              rm -rf mani_skill/ &&
+              git clone --recurse-submodules https://github.com/Pranav-Malpure/Image-based-RL-Manipulation &&
+              cd Image-based-RL-Manipulation/ManiSkill &&
+              git checkout xarm_allegro &&
+              mv mani_skill/ /workspace/ManiSkill/ &&
+              cd .. &&
+              python3 sac_rgbd_aug.py --env_id=PickCube-v1 --obs_mode rgb --num_envs=8 --utd=0.5 --buffer_size=250_000 --robot_uids=xarm6_allegro_left --num_eval_envs=8 --control-mode=pd_joint_vel --camera_width=64 --camera_height=64 --total_timesteps=12000000 --eval_freq=10_000
           volumeMounts:
             - mountPath: /pers_vol
               name: pm-slow-vol2
