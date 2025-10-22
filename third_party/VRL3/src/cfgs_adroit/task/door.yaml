@@ -1,4 +1,0 @@
-num_train_frames: 4100000
-task_name: door-v0
-agent:
-  encoder_lr_scale: 1
