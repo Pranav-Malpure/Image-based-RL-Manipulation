@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: maniskill-pm-pod-diffusion-2
+  name: maniskill-pm-pod-pranav-diffusion
 spec:
   # runtimeClassName: nvidia
   containers:
@@ -18,11 +18,11 @@ spec:
       limits:
         nvidia.com/gpu: "1"
         memory: "32G"
-        cpu: "4"
+        cpu: "16"
       requests:
         nvidia.com/gpu: "1"
         memory: "32G"
-        cpu: "4"
+        cpu: "8"
   restartPolicy: Never
   # affinity:
   #   nodeAffinity:
@@ -42,9 +42,18 @@ spec:
           - key: nvidia.com/gpu.product
             operator: In
             values:
-            - "NVIDIA-L40"      
+            - "NVIDIA-A100-80GB-PCIe"
+            - "NVIDIA-A100-SXM4-80GB"
+            - "NVIDIA-A100-80GB-PCIe-MIG-1g.10gb"
+            - "NVIDIA-A100-PCIE-40GB"
+            - "NVIDIA-RTX-A6000"
+            - "NVIDIA-RTX-A5000"
             - "NVIDIA-GeForce-RTX-4090"
+            - "NVIDIA-GeForce-RTX-4080"
+            - "NVIDIA-GeForce-RTX-3090-Ti"
             - "NVIDIA-GeForce-RTX-3090"
+            - "NVIDIA-GeForce-RTX-3080-Ti"
+            - "NVIDIA-GeForce-RTX-3080"
       - weight: 1
         preference:
           matchExpressions:
@@ -98,6 +107,28 @@ spec:
             - "k8s-gpu-13.sdsc.optiputer.net"
             - "k8s-gpu-14.sdsc.optiputer.net"
             - "k8s-gpu-15.sdsc.optiputer.net"
+            # - "k8s-haosu-02.sdsc.optiputer.net"
+            # - "k8s-haosu-03.sdsc.optiputer.net"
+            # - "k8s-haosu-04.sdsc.optiputer.net"
+            # - "k8s-haosu-05.sdsc.optiputer.net"
+            # - "k8s-haosu-06.sdsc.optiputer.net"
+            # - "k8s-haosu-07.sdsc.optiputer.net"
+            # - "k8s-haosu-08.sdsc.optiputer.net"
+            # - "k8s-haosu-09.sdsc.optiputer.net"
+            # - "k8s-haosu-10.sdsc.optiputer.net"
+            # - "k8s-haosu-11.sdsc.optiputer.net"
+            # - "k8s-haosu-12.sdsc.optiputer.net"
+            # - "k8s-haosu-13.sdsc.optiputer.net"
+            # - "k8s-haosu-14.sdsc.optiputer.net"
+            # - "k8s-haosu-15.sdsc.optiputer.net"
+            # - "k8s-haosu-16.sdsc.optiputer.net"
+            # - "k8s-haosu-17.sdsc.optiputer.net"
+            # - "k8s-haosu-18.sdsc.optiputer.net"
+            # - "k8s-haosu-19.sdsc.optiputer.net"
+            # - "k8s-haosu-20.sdsc.optiputer.net"
+            # - "k8s-haosu-21.sdsc.optiputer.net"
+            # - "k8s-haosu-22.sdsc.optiputer.net"
+            # - "k8s-haosu-23.sdsc.optiputer.net"
   volumes:
     - name: pm-slow-vol2
       persistentVolumeClaim:
