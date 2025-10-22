@@ -1,11 +1,11 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: maniskill-pm-job
+  name: maniskill-pm-job-initialization
 spec:
   template:
     metadata:
-      name: maniskill-pm-pod
+      name: maniskill-pm-pod-initialization
     spec:
       containers:
         - name: gpu-container
