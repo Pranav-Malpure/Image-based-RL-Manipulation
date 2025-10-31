@@ -21,10 +21,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 import tyro
-from mani_skill.utils.visualization.misc import tile_images
 
 import mani_skill.envs
-import multiprocessing
 
 
 @dataclass
@@ -37,18 +35,16 @@ class Args:
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
     cuda: bool = True
     """if toggled, cuda will be enabled by default"""
-    track: bool = True
+    track: bool = False
     """if toggled, this experiment will be tracked with Weights and Biases"""
-    wandb_project_name: str = "Reward learning runs"
+    wandb_project_name: str = "ManiSkill"
     """the wandb's project name"""
-    wandb_entity: Optional[str] = "pranavmalpure-uc-san-diego-health"
+    wandb_entity: Optional[str] = None
     """the entity (team) of wandb's project"""
     wandb_group: str = "SAC"
     """the group of the run for wandb"""
     capture_video: bool = True
     """whether to capture videos of the agent performances (check out `videos` folder)"""
-    wandb_video_freq: int = 10000
-    """frequency to log videos to wandb in terms of environment steps (multiple of eval_freq)"""
     save_trajectory: bool = False
     """whether to save trajectory data into the `videos` folder"""
     save_model: bool = True
@@ -69,9 +65,9 @@ class Args:
     """whether to include the state in the observation"""
     env_vectorization: str = "gpu"
     """the type of environment vectorization to use"""
-    num_envs: int = 2
+    num_envs: int = 16
     """the number of parallel environments"""
-    num_eval_envs: int = 8
+    num_eval_envs: int = 16
     """the number of parallel evaluation environments"""
     partial_reset: bool = False
     """whether to let parallel environments reset upon termination instead of truncation"""
@@ -133,8 +129,6 @@ class Args:
     """the width of the camera image. If none it will use the default the environment specifies"""
     camera_height: Optional[int] = None
     """the height of the camera image. If none it will use the default the environment specifies."""
-    robot_uids: str = "xarm6_allegro_left"
-    """the robot uids to use. If none it will use the default the environment specifies."""
 
     # to be filled in runtime
     grad_steps_per_iteration: int = 0
@@ -254,7 +248,6 @@ class ReplayBuffer:
             dones=self.dones[batch_inds, env_inds].to(self.sample_device)
         )
 
-
 # ALGO LOGIC: initialize agent here:
 class PlainConv(nn.Module):
     def __init__(self,
@@ -362,14 +355,14 @@ class EncoderObsWrapper(nn.Module):
     def forward(self, obs):
         if "rgb" in obs:
             rgb = obs['rgb'].float() / 255.0 # (B, H, W, 3*k)
+        if "depth" in obs:
+            depth = obs['depth'].float() # (B, H, W, 1*k)
+        if "rgb" and "depth" in obs:
+            img = torch.cat([rgb, depth], dim=3) # (B, H, W, C)
+        elif "rgb" in obs:
             img = rgb
         elif "depth" in obs:
-            depth = obs['depth'].float() # (B, H, W, 1*k)
             img = depth
-        elif "rgbd" in obs:
-            # img = torch.cat([rgb, depth], dim=3) # (B, H, W, C)
-            img = obs['rgbd'].float()
-            img[..., :3] = img[..., :3]/255.0
         else:
             raise ValueError(f"Observation dict must contain 'rgb' or 'depth'")
         img = img.permute(0, 3, 1, 2) # (B, C, H, W)
@@ -391,21 +384,14 @@ class SoftQNetwork(nn.Module):
         self.encoder = encoder
         action_dim = np.prod(envs.single_action_space.shape)
         state_dim = envs.single_observation_space['state'].shape[0]
-
-        # self.trunk = nn.Sequential(nn.Linear(self.encoder.encoder.out_dim+action_dim + state_dim, 512), nn.LayerNorm(512), nn.Tanh()) # TODO: have to check this 512
-        # self.mlp = make_mlp(512, [512, 256, 1], last_act=False)  #TODO check this for 512 input(its for RGBD I think)
         self.mlp = make_mlp(encoder.encoder.out_dim+action_dim+state_dim, [512, 256, 1], last_act=False)
 
     def forward(self, obs, action, visual_feature=None, detach_encoder=False):
-        if obs is None:
-            print("here is the mistake")
         if visual_feature is None:
             visual_feature = self.encoder(obs)
         if detach_encoder:
             visual_feature = visual_feature.detach()
         x = torch.cat([visual_feature, obs["state"], action], dim=1)
-        # h = self.trunk(x)
-        # return self.mlp(h)
         return self.mlp(x)
 
 
@@ -425,14 +411,10 @@ class Actor(nn.Module):
         if "depth" in sample_obs:
             in_channels += sample_obs["depth"].shape[-1]
             image_size = sample_obs["depth"].shape[1:3]
-        if "rgbd" in sample_obs:
-            in_channels += sample_obs["rgbd"].shape[-1]
-            image_size = sample_obs["rgbd"].shape[1:3]
 
         self.encoder = EncoderObsWrapper(
             PlainConv(in_channels=in_channels, out_dim=256, image_size=image_size) # assume image is 64x64
         )
-
         self.mlp = make_mlp(self.encoder.encoder.out_dim+state_dim, [512, 256], last_act=True)
         self.fc_mean = nn.Linear(256, action_dim)
         self.fc_logstd = nn.Linear(256, action_dim)
@@ -459,7 +441,6 @@ class Actor(nn.Module):
     def get_eval_action(self, obs):
         mean, log_std, _ = self(obs)
         action = torch.tanh(mean) * self.action_scale + self.action_bias
-        action[:,5] = 0
         return action
 
     def get_action(self, obs, detach_encoder=False):
@@ -474,7 +455,6 @@ class Actor(nn.Module):
         log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + 1e-6)
         log_prob = log_prob.sum(1, keepdim=True)
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
-        action[:,5] = 0
         return action, log_prob, mean, visual_feature
 
     def to(self, device):
@@ -483,22 +463,17 @@ class Actor(nn.Module):
         return super().to(device)
 
 class Logger:
-    def __init__(self, log_wandb=False, tensorboard: SummaryWriter = None, manager=None) -> None:
+    def __init__(self, log_wandb=False, tensorboard: SummaryWriter = None) -> None:
         self.writer = tensorboard
         self.log_wandb = log_wandb
     def add_scalar(self, tag, scalar_value, step):
         if self.log_wandb:
             wandb.log({tag: scalar_value}, step=step)
         self.writer.add_scalar(tag, scalar_value, step)
-    def add_video(self, tag, vid_tensor, step):
-        if self.log_wandb:
-            pass
     def close(self):
         self.writer.close()
 
 if __name__ == "__main__":
-    plot_return = []
-    plot_success_once = []
     args = tyro.cli(Args)
     args.grad_steps_per_iteration = int(args.training_freq * args.utd)
     args.steps_per_env = args.training_freq // args.num_envs
@@ -515,9 +490,9 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-    
+
     ####### Environment setup #######
-    env_kwargs = dict(obs_mode=args.obs_mode, render_mode=args.render_mode, robot_uids = args.robot_uids, sim_backend="gpu", sensor_configs=dict())
+    env_kwargs = dict(obs_mode=args.obs_mode, render_mode=args.render_mode, sim_backend="gpu", sensor_configs=dict())
     if args.control_mode is not None:
         env_kwargs["control_mode"] = args.control_mode
     if args.camera_width is not None:
@@ -529,26 +504,8 @@ if __name__ == "__main__":
     eval_envs = gym.make(args.env_id, num_envs=args.num_eval_envs, reconfiguration_freq=args.eval_reconfiguration_freq, human_render_camera_configs=dict(shader_pack="default"), **env_kwargs)
 
     # rgbd obs mode returns a dict of data, we flatten it so there is just a rgbd key and state key
-    print(" env_kwargs[obs_mode]: ",env_kwargs["obs_mode"])
-    if "depth" in env_kwargs["obs_mode"] and "rgb" in env_kwargs["obs_mode"]:
-        print("rgb_depth start")
-        envs = FlattenRGBDObservationWrapper(envs, rgb=True, depth=True, state=args.include_state)
-        eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=True, depth=True, state=args.include_state)
-    elif "depth" in env_kwargs["obs_mode"]:
-        print("depth start")
-        envs = FlattenRGBDObservationWrapper(envs, rgb=False, depth=True, state=args.include_state)
-        eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=False, depth=True, state=args.include_state)
-    elif "rgb" in env_kwargs["obs_mode"]:
-        print("rgb start")
-        envs = FlattenRGBDObservationWrapper(envs, rgb=True, depth=False, state=args.include_state)
-        eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=True, depth=False, state=args.include_state)
-    else:
-        print("state start")
-        envs = FlattenRGBDObservationWrapper(envs, rgb=False, depth=False, state=args.include_state)
-        eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=False, depth=False, state=args.include_state)
-
-    # envs = FlattenRGBDObservationWrapper(envs, rgb=True, depth=False, state=args.include_state)
-    # eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=True, depth=False, state=args.include_state)
+    envs = FlattenRGBDObservationWrapper(envs, rgb=True, depth=False, state=args.include_state)
+    eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=True, depth=False, state=args.include_state)
 
     if isinstance(envs.action_space, gym.spaces.Dict):
         envs = FlattenActionSpaceWrapper(envs)
@@ -561,8 +518,7 @@ if __name__ == "__main__":
         if args.save_train_video_freq is not None:
             save_video_trigger = lambda x : (x // args.num_steps) % args.save_train_video_freq == 0
             envs = RecordEpisode(envs, output_dir=f"runs/{run_name}/train_videos", save_trajectory=False, save_video_trigger=save_video_trigger, max_steps_per_video=args.num_steps, video_fps=30)
-        # eval_envs = RecordEpisode(eval_envs, output_dir=eval_output_dir, save_trajectory=args.save_trajectory, save_video=args.capture_video, trajectory_name="trajectory", max_steps_per_video=args.num_eval_steps, video_fps=30)
-        eval_envs = RecordEpisode(eval_envs, output_dir=eval_output_dir, save_trajectory=args.save_trajectory, save_video=args.capture_video, trajectory_name="trajectory", max_steps_per_video=args.num_eval_steps, video_fps=30, wandb_video_freq=args.wandb_video_freq//args.eval_freq)
+        eval_envs = RecordEpisode(eval_envs, output_dir=eval_output_dir, save_trajectory=args.save_trajectory, save_video=args.capture_video, trajectory_name="trajectory", max_steps_per_video=args.num_eval_steps, video_fps=30)
     envs = ManiSkillVectorEnv(envs, args.num_envs, ignore_terminations=not args.partial_reset, record_metrics=True)
     eval_envs = ManiSkillVectorEnv(eval_envs, args.num_eval_envs, ignore_terminations=not args.eval_partial_reset, record_metrics=True)
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
@@ -576,7 +532,6 @@ if __name__ == "__main__":
             config = vars(args)
             config["env_cfg"] = dict(**env_kwargs, num_envs=args.num_envs, env_id=args.env_id, reward_mode="normalized_dense", env_horizon=max_episode_steps, partial_reset=args.partial_reset)
             config["eval_env_cfg"] = dict(**env_kwargs, num_envs=args.num_eval_envs, env_id=args.env_id, reward_mode="normalized_dense", env_horizon=max_episode_steps, partial_reset=False)
-            wandb.login(key="ef1a1b0f1e6f448c0251f237bf89d1a18f05126e")
             wandb.init(
                 project=args.wandb_project_name,
                 entity=args.wandb_entity,
@@ -592,7 +547,7 @@ if __name__ == "__main__":
             "hyperparameters",
             "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
         )
-        logger = Logger(log_wandb=args.track, tensorboard=writer, manager=multiprocessing.Manager())
+        logger = Logger(log_wandb=args.track, tensorboard=writer)
     else:
         print("Running evaluation")
 
@@ -609,7 +564,6 @@ if __name__ == "__main__":
     # TRY NOT TO MODIFY: start the game
     obs, info = envs.reset(seed=args.seed) # in Gymnasium, seed is given to reset() instead of seed()
     eval_obs, _ = eval_envs.reset(seed=args.seed)
-    # print("OBS ", obs)
 
     # architecture is all actor, q-networks share the same vision encoder. Output of encoder is concatenates with any state data followed by separate MLPs.
     actor = Actor(envs, sample_obs=obs).to(device)
@@ -617,38 +571,19 @@ if __name__ == "__main__":
     qf2 = SoftQNetwork(envs, actor.encoder).to(device)
     qf1_target = SoftQNetwork(envs, actor.encoder).to(device)
     qf2_target = SoftQNetwork(envs, actor.encoder).to(device)
-
-    # actor = Actor(envs, sample_obs=obs)
-    # qf1 = SoftQNetwork(envs, actor.encoder)
-    # qf2 = SoftQNetwork(envs, actor.encoder)
-    # qf1_target = SoftQNetwork(envs, actor.encoder)
-    # qf2_target = SoftQNetwork(envs, actor.encoder)
-
-    # actor = nn.DataParallel(actor)
-    # qf1 = nn.DataParallel(qf1)
-    # qf2 = nn.DataParallel(qf2)
-    # qf1_target = nn.DataParallel(qf1_target)
-    # qf2_target = nn.DataParallel(qf2_target)
-
+    if args.checkpoint is not None:
+        ckpt = torch.load(args.checkpoint)
+        actor.load_state_dict(ckpt['actor'])
+        qf1.load_state_dict(ckpt['qf1'])
+        qf2.load_state_dict(ckpt['qf2'])
+    qf1_target.load_state_dict(qf1.state_dict())
+    qf2_target.load_state_dict(qf2.state_dict())
     q_optimizer = optim.Adam(
         list(qf1.mlp.parameters()) +
         list(qf2.mlp.parameters()) +
         list(qf1.encoder.parameters()),
         lr=args.q_lr)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
-
-    if args.checkpoint is not None:
-        ckpt = torch.load(args.checkpoint, weights_only=True)
-        actor.load_state_dict(ckpt['actor'])
-        qf1.load_state_dict(ckpt['qf1'])
-        qf2.load_state_dict(ckpt['qf2'])
-        qf1_target.load_state_dict(ckpt['qf1_target'])
-        qf2_target.load_state_dict(ckpt['qf2_target'])
-        actor_optimizer.load_state_dict(ckpt['optimizer_actor'])
-        q_optimizer.load_state_dict(ckpt['optimizer_qf1'])
-    else:    
-        qf1_target.load_state_dict(qf1.state_dict())
-        qf2_target.load_state_dict(qf2.state_dict())
 
     # Automatic entropy tuning
     if args.autotune:
@@ -659,8 +594,6 @@ if __name__ == "__main__":
     else:
         alpha = args.alpha
 
-    if args.checkpoint is not None:
-        log_alpha = ckpt['log_alpha']
     global_step = 0
     global_update = 0
     learning_has_started = False
@@ -695,8 +628,6 @@ if __name__ == "__main__":
                 f"success_once: {eval_metrics_mean['success_once']:.2f}, "
                 f"return: {eval_metrics_mean['return']:.2f}"
             )
-            plot_success_once.append(eval_metrics_mean['success_once'])
-            plot_return.append(eval_metrics_mean['return'])
             if logger is not None:
                 eval_time = time.perf_counter() - stime
                 cumulative_times["eval_time"] += eval_time
@@ -709,15 +640,9 @@ if __name__ == "__main__":
                 model_path = f"runs/{run_name}/ckpt_{global_step}.pt"
                 torch.save({
                     'actor': actor.state_dict(),
-                    'qf1': qf1.state_dict(),
-                    'qf2': qf2.state_dict(),
+                    'qf1': qf1_target.state_dict(),
+                    'qf2': qf2_target.state_dict(),
                     'log_alpha': log_alpha,
-                    'qf1_target': qf1_target.state_dict(),
-                    'qf2_target': qf2_target.state_dict(),
-                    'optimizer_actor': actor_optimizer.state_dict(),
-                    'optimizer_qf1': q_optimizer.state_dict(),
-                    'episode': num_episodes,  # For example, to track episodes or steps
-                    'steps': global_step
                 }, model_path)
                 print(f"model saved to {model_path}")
 
@@ -728,9 +653,7 @@ if __name__ == "__main__":
 
             # ALGO LOGIC: put action logic here
             if not learning_has_started:
-                modified_env_action = envs.action_space.sample()
-                modified_env_action[:,5] = 0
-                actions = torch.tensor(modified_env_action, dtype=torch.float32, device=device)
+                actions = 2 * torch.rand(size=envs.action_space.shape, dtype=torch.float32, device=device) - 1
             else:
                 actions, _, _, _ = actor.get_action(obs)
                 actions = actions.detach()
@@ -845,21 +768,6 @@ if __name__ == "__main__":
             logger.add_scalar("time/total_rollout+update_time", cumulative_times["rollout_time"] + cumulative_times["update_time"], global_step)
             if args.autotune:
                 logger.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
-    
-
-
-    import pickle
-    # plt.figure(1)
-    # plt.plot(plot_success_once)
-    # plt.show()
-    with open('plot_success_once.pickle', 'wb') as file:
-        pickle.dump(plot_success_once, file)
-
-    # plt.figure(2)
-    # plt.plot(plot_return)
-    # plt.show()
-    with open('plot_return.pickle', 'wb') as file:
-        pickle.dump(plot_return, file)
 
     if not args.evaluate and args.save_model:
         model_path = f"runs/{run_name}/final_ckpt.pt"
