@@ -26,6 +26,7 @@ from mani_skill.utils.visualization.misc import tile_images
 import mani_skill.envs
 import multiprocessing
 
+
 @dataclass
 class Args:
     exp_name: Optional[str] = None
@@ -38,7 +39,7 @@ class Args:
     """if toggled, cuda will be enabled by default"""
     track: bool = True
     """if toggled, this experiment will be tracked with Weights and Biases"""
-    wandb_project_name: str = "Augmentations runs"
+    wandb_project_name: str = "Reward learning runs"
     """the wandb's project name"""
     wandb_entity: Optional[str] = "pranavmalpure-uc-san-diego-health"
     """the entity (team) of wandb's project"""
@@ -132,7 +133,7 @@ class Args:
     """the width of the camera image. If none it will use the default the environment specifies"""
     camera_height: Optional[int] = None
     """the height of the camera image. If none it will use the default the environment specifies."""
-    robot_uids: str = "panda"
+    robot_uids: str = "xarm6_allegro_left"
     """the robot uids to use. If none it will use the default the environment specifies."""
 
     # to be filled in runtime
@@ -140,7 +141,6 @@ class Args:
     """the number of gradient updates per iteration"""
     steps_per_env: int = 0
     """the number of steps each parallel env takes per iteration"""
-
 class DictArray(object):
     def __init__(self, buffer_shape, element_space, data_dict=None, device=None):
         self.buffer_shape = buffer_shape
@@ -254,72 +254,6 @@ class ReplayBuffer:
             dones=self.dones[batch_inds, env_inds].to(self.sample_device)
         )
 
-
-class RandomShiftsAug(nn.Module):
-    def __init__(self, pad):
-        super().__init__()
-        self.pad = pad
-
-    def forward(self, x):
-        original_x = x
-        obs = x
-        # print("OBS inside RandomShiftsAug: ", obs)
-        if "rgb" in obs:
-            rgb = obs['rgb'].float() / 255.0 # (B, H, W, 3*k)
-            img = rgb
-        elif "depth" in obs:
-            depth = obs['depth'].float() # (B, H, W, 1*k)
-            img = depth
-        elif "rgbd" in obs:
-            # img = torch.cat([rgb, depth], dim=3) # (B, H, W, C)
-            img = obs['rgbd'].float()
-            img[..., :3] = img[..., :3]/255.0
-        else:
-            raise ValueError(f"Observation dict must contain 'rgb' or 'depth'")
-        x = img.permute(0, 3, 1, 2) # (B, C, H, W)
-
-        n, c, h, w = x.size()
-        assert h == w
-        padding = tuple([self.pad] * 4)
-        x = F.pad(x, padding, 'replicate')
-        eps = 1.0 / (h + 2 * self.pad)
-        arange = torch.linspace(-1.0 + eps,
-                                1.0 - eps,
-                                h + 2 * self.pad,
-                                device=x.device,
-                                dtype=x.dtype)[:h]
-        arange = arange.unsqueeze(0).repeat(h, 1).unsqueeze(2)
-        base_grid = torch.cat([arange, arange.transpose(1, 0)], dim=2)
-        base_grid = base_grid.unsqueeze(0).repeat(n, 1, 1, 1)
-
-        shift = torch.randint(0,
-                              2 * self.pad + 1,
-                              size=(n, 1, 1, 2),
-                              device=x.device,
-                              dtype=x.dtype)
-        shift *= 2.0 / (h + 2 * self.pad)
-
-        grid = base_grid + shift
-        augmented_x = F.grid_sample(x,
-                             grid,
-                             padding_mode='zeros',
-                             align_corners=False)
-        
-        augmented_x = augmented_x.permute(0, 2, 3, 1)  # (B, H, W, C)
-        
-        # Split back into 'rgb' and 'depth' if both were present
-        result = {}
-        result['state'] = original_x['state']
-        # if "rgb" in obs and "depth" in obs:
-        if "rgbd" in obs:
-            augmented_x[..., :3] = augmented_x[..., :3] * 255.0
-            result['rgbd'] = augmented_x
-        elif "rgb" in obs:
-            result['rgb'] = augmented_x * 255.0
-        elif "depth" in obs:
-            result['depth'] = augmented_x
-        
-        return result
 
 # ALGO LOGIC: initialize agent here:
 class PlainConv(nn.Module):
@@ -458,9 +392,9 @@ class SoftQNetwork(nn.Module):
         action_dim = np.prod(envs.single_action_space.shape)
         state_dim = envs.single_observation_space['state'].shape[0]
 
-        self.trunk = nn.Sequential(nn.Linear(self.encoder.encoder.out_dim+action_dim + state_dim, 512), nn.LayerNorm(512), nn.Tanh()) # TODO: have to check this 512
-        self.mlp = make_mlp(512, [512, 256, 1], last_act=False)  #TODO check this for 512 input(its for RGBD I think)
-        # self.mlp = make_mlp(encoder.encoder.out_dim+action_dim+state_dim, [512, 256, 1], last_act=False)
+        # self.trunk = nn.Sequential(nn.Linear(self.encoder.encoder.out_dim+action_dim + state_dim, 512), nn.LayerNorm(512), nn.Tanh()) # TODO: have to check this 512
+        # self.mlp = make_mlp(512, [512, 256, 1], last_act=False)  #TODO check this for 512 input(its for RGBD I think)
+        self.mlp = make_mlp(encoder.encoder.out_dim+action_dim+state_dim, [512, 256, 1], last_act=False)
 
     def forward(self, obs, action, visual_feature=None, detach_encoder=False):
         if obs is None:
@@ -470,8 +404,9 @@ class SoftQNetwork(nn.Module):
         if detach_encoder:
             visual_feature = visual_feature.detach()
         x = torch.cat([visual_feature, obs["state"], action], dim=1)
-        h = self.trunk(x)
-        return self.mlp(h)
+        # h = self.trunk(x)
+        # return self.mlp(h)
+        return self.mlp(x)
 
 
 LOG_STD_MAX = 2
@@ -513,8 +448,9 @@ class Actor(nn.Module):
         if detach_encoder:
             visual_feature = visual_feature.detach()
         x = torch.cat([visual_feature, obs['state']], dim=1)
-        h = self.trunk(x)
-        return self.mlp(h), visual_feature
+        # h = self.trunk(x)
+        # return self.mlp(h), visual_feature
+        return self.mlp(x), visual_feature
 
     def forward(self, obs, detach_encoder=False):
         x, visual_feature = self.get_feature(obs, detach_encoder)
@@ -528,7 +464,7 @@ class Actor(nn.Module):
     def get_eval_action(self, obs):
         mean, log_std, _ = self(obs)
         action = torch.tanh(mean) * self.action_scale + self.action_bias
-        # action[:,5] = 0
+        action[:,5] = 0
         return action
 
     def get_action(self, obs, detach_encoder=False):
@@ -543,14 +479,13 @@ class Actor(nn.Module):
         log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + 1e-6)
         log_prob = log_prob.sum(1, keepdim=True)
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
-        # action[:,5] = 0
+        action[:,5] = 0
         return action, log_prob, mean, visual_feature
 
     def to(self, device):
         self.action_scale = self.action_scale.to(device)
         self.action_bias = self.action_bias.to(device)
         return super().to(device)
-
 
 class Logger:
     def __init__(self, log_wandb=False, tensorboard: SummaryWriter = None, manager=None) -> None:
@@ -560,17 +495,13 @@ class Logger:
         if self.log_wandb:
             wandb.log({tag: scalar_value}, step=step)
         self.writer.add_scalar(tag, scalar_value, step)
-
     def add_video(self, tag, vid_tensor, step):
         if self.log_wandb:
             pass
     def close(self):
         self.writer.close()
 
-
 if __name__ == "__main__":
-    
-    
     plot_return = []
     plot_success_once = []
     args = tyro.cli(Args)
@@ -589,7 +520,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-    use_augmentation = True
+    
     ####### Environment setup #######
     env_kwargs = dict(obs_mode=args.obs_mode, render_mode=args.render_mode, robot_uids = args.robot_uids, sim_backend="gpu", sensor_configs=dict())
     if args.control_mode is not None:
@@ -624,9 +555,6 @@ if __name__ == "__main__":
     # envs = FlattenRGBDObservationWrapper(envs, rgb=True, depth=False, state=args.include_state)
     # eval_envs = FlattenRGBDObservationWrapper(eval_envs, rgb=True, depth=False, state=args.include_state)
 
-    # data augmentation
-    aug = RandomShiftsAug(pad=4)
-
     if isinstance(envs.action_space, gym.spaces.Dict):
         envs = FlattenActionSpaceWrapper(envs)
         eval_envs = FlattenActionSpaceWrapper(eval_envs)
@@ -650,7 +578,6 @@ if __name__ == "__main__":
         print("Running training")
         if args.track:
             import wandb
-
             config = vars(args)
             config["env_cfg"] = dict(**env_kwargs, num_envs=args.num_envs, env_id=args.env_id, reward_mode="normalized_dense", env_horizon=max_episode_steps, partial_reset=args.partial_reset)
             config["eval_env_cfg"] = dict(**env_kwargs, num_envs=args.num_eval_envs, env_id=args.env_id, reward_mode="normalized_dense", env_horizon=max_episode_steps, partial_reset=False)
@@ -688,9 +615,6 @@ if __name__ == "__main__":
     obs, info = envs.reset(seed=args.seed) # in Gymnasium, seed is given to reset() instead of seed()
     eval_obs, _ = eval_envs.reset(seed=args.seed)
     # print("OBS ", obs)
-    if use_augmentation:
-        obs = aug(obs)
-        eval_obs = aug(eval_obs)
 
     # architecture is all actor, q-networks share the same vision encoder. Output of encoder is concatenates with any state data followed by separate MLPs.
     actor = Actor(envs, sample_obs=obs).to(device)
@@ -711,7 +635,6 @@ if __name__ == "__main__":
     # qf1_target = nn.DataParallel(qf1_target)
     # qf2_target = nn.DataParallel(qf2_target)
 
-    # print("Action actor: ", actor.get_eval_action(eval_obs))
     q_optimizer = optim.Adam(
         list(qf1.mlp.parameters()) +
         list(qf2.mlp.parameters()) +
@@ -757,17 +680,11 @@ if __name__ == "__main__":
             actor.eval()
             stime = time.perf_counter()
             eval_obs, _ = eval_envs.reset()
-            if use_augmentation:
-                eval_obs = aug(eval_obs)
             eval_metrics = defaultdict(list)
             num_episodes = 0
             for _ in range(args.num_eval_steps):
                 with torch.no_grad():
-                    if use_augmentation:
-                        eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = eval_envs.step(actor.get_eval_action(aug(eval_obs)))
-                    else:
-                        eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = eval_envs.step(actor.get_eval_action(eval_obs))
-
+                    eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = eval_envs.step(actor.get_eval_action(eval_obs))
                     if "final_info" in eval_infos:
                         mask = eval_infos["_final_info"]
                         num_episodes += mask.sum()
@@ -817,15 +734,12 @@ if __name__ == "__main__":
             # ALGO LOGIC: put action logic here
             if not learning_has_started:
                 modified_env_action = envs.action_space.sample()
-                # modified_env_action[:,5] = 0
+                modified_env_action[:,5] = 0
                 actions = torch.tensor(modified_env_action, dtype=torch.float32, device=device)
             else:
-                if use_augmentation:
-                    actions, _, _, _ = actor.get_action(aug(obs))
-                else:
-                    actions, _, _, _ = actor.get_action(obs)
+                actions, _, _, _ = actor.get_action(obs)
                 actions = actions.detach()
-            # print("Action envs? " ,actions)
+
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, rewards, terminations, truncations, infos = envs.step(actions)
             real_next_obs = {k:v.clone() for k, v in next_obs.items()}
@@ -939,7 +853,6 @@ if __name__ == "__main__":
     
 
 
-    print("Yo")
     import pickle
     # plt.figure(1)
     # plt.plot(plot_success_once)
