@@ -1,11 +1,11 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: maniskill-pm-job-short-horizon-grasp-fixed
+  name: maniskill-pm-job-70steps-grasp-fixed
 spec:
   template:
     metadata:
-      name: maniskill-pm-pod-short-horizon-grasp-fixed
+      name: maniskill-pm-pod-70steps-grasp-fixed
     spec:
       containers:
         - name: gpu-container
