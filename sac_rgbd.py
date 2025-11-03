@@ -77,9 +77,9 @@ class Args:
     """whether to let parallel environments reset upon termination instead of truncation"""
     eval_partial_reset: bool = False
     """whether to let parallel evaluation environments reset upon termination instead of truncation"""
-    num_steps: int = 70
+    num_steps: int = 75
     """the number of steps to run in each environment per policy rollout"""
-    num_eval_steps: int = 70
+    num_eval_steps: int = 75
     """the number of steps to run in each evaluation environment during evaluation"""
     reconfiguration_freq: Optional[int] = None
     """how often to reconfigure the environment during training"""
@@ -691,10 +691,14 @@ if __name__ == "__main__":
                 eval_metrics_mean[k] = mean
                 if logger is not None:
                     logger.add_scalar(f"eval/{k}", mean, global_step)
-            pbar.set_description(
+            # Note: is_grasped (from is_grasping check) is automatically logged above if present in episode info
+            pbar_description = (
                 f"success_once: {eval_metrics_mean['success_once']:.2f}, "
                 f"return: {eval_metrics_mean['return']:.2f}"
             )
+            if "is_grasped" in eval_metrics_mean:
+                pbar_description += f", is_grasped: {eval_metrics_mean['is_grasped']:.2f}"
+            pbar.set_description(pbar_description)
             plot_success_once.append(eval_metrics_mean['success_once'])
             plot_return.append(eval_metrics_mean['return'])
             if logger is not None:
@@ -755,6 +759,7 @@ if __name__ == "__main__":
                     real_next_obs[k][need_final_obs] = infos["final_observation"][k][need_final_obs].clone()
                 for k, v in final_info["episode"].items():
                     logger.add_scalar(f"train/{k}", v[done_mask].float().mean(), global_step)
+                # Note: is_grasped (from is_grasping check) is automatically logged above if present in episode info
 
             rb.add(obs, real_next_obs, actions, rewards, stop_bootstrap)
 

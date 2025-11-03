@@ -1,11 +1,11 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: maniskill-pm-job-70steps-cube-7cm
+  name: maniskill-pm-job-70steps-cube-6cm
 spec:
   template:
     metadata:
-      name: maniskill-pm-pod-70steps-cube-7cm
+      name: maniskill-pm-pod-70steps-cube-6cm
     spec:
       containers:
         - name: gpu-container
