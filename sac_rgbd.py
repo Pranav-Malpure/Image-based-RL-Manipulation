@@ -101,7 +101,7 @@ class Args:
     """the replay memory buffer size"""
     buffer_device: str = "cuda"
     """where the replay buffer is stored. Can be 'cpu' or 'cuda' for GPU"""
-    gamma: float = 0.8
+    gamma: float = 0.95
     """the discount factor gamma"""
     tau: float = 0.01
     """target smoothing coefficient"""
@@ -576,6 +576,7 @@ if __name__ == "__main__":
             config = vars(args)
             config["env_cfg"] = dict(**env_kwargs, num_envs=args.num_envs, env_id=args.env_id, reward_mode="normalized_dense", env_horizon=max_episode_steps, partial_reset=args.partial_reset)
             config["eval_env_cfg"] = dict(**env_kwargs, num_envs=args.num_eval_envs, env_id=args.env_id, reward_mode="normalized_dense", env_horizon=max_episode_steps, partial_reset=False)
+            config["wandb_group"] = args.wandb_group
             wandb.login(key="ef1a1b0f1e6f448c0251f237bf89d1a18f05126e")
             wandb.init(
                 project=args.wandb_project_name,
