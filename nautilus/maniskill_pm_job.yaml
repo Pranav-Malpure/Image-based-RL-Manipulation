@@ -1,11 +1,11 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: maniskill-pm-job-70steps-cube-6cm
+  name: maniskill-pm-job-75steps-6cm-gamma95-534
 spec:
   template:
     metadata:
-      name: maniskill-pm-pod-70steps-cube-6cm
+      name: maniskill-pm-job-75steps-6cm-gamma95-534
     spec:
       containers:
         - name: gpu-container
@@ -23,7 +23,7 @@ spec:
               git checkout lab_pc &&
               mv mani_skill/ /workspace/ManiSkill/ &&
               cd .. &&
-              python3 sac_rgbd.py --env_id=PickCube-v1 --obs_mode rgb --num_envs=8 --utd=0.5 --buffer_size=250_000 --robot_uids=xarm6_allegro_left --num_eval_envs=8 --control-mode=pd_joint_vel --camera_width=64 --camera_height=64 --total_timesteps=12000000 --eval_freq=10_000
+              python3 sac_rgbd.py --env_id=PickCube-v1 --obs_mode rgb --num_envs=8 --utd=0.5 --buffer_size=250_000 --robot_uids=xarm6_allegro_left --num_eval_envs=8 --control-mode=pd_joint_vel --camera_width=64 --camera_height=64 --total_timesteps=12000000 --eval_freq=10_000 --seed=534 --wandb_group "6cm CUBE, gamma=0.95, 75steps"
           volumeMounts:
             - mountPath: /pers_vol
               name: pm-slow-vol2
