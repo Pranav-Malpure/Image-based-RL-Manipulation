@@ -25,9 +25,6 @@ from mani_skill.utils.visualization.misc import tile_images
 
 import mani_skill.envs
 import multiprocessing
-import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend
-import matplotlib.pyplot as plt
 
 
 @dataclass
@@ -52,6 +49,8 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
     wandb_video_freq: int = 20000
     """frequency to log videos to wandb in terms of environment steps (multiple of eval_freq)"""
+    wandb_reward_trajectories: bool = True
+    """whether to upload reward trajectories to wandb (to help with reward engineering)"""
     save_trajectory: bool = False
     """whether to save trajectory data into the `videos` folder"""
     save_model: bool = True
@@ -80,9 +79,9 @@ class Args:
     """whether to let parallel environments reset upon termination instead of truncation"""
     eval_partial_reset: bool = False
     """whether to let parallel evaluation environments reset upon termination instead of truncation"""
-    num_steps: int =75
+    num_steps: int =80  
     """the number of steps to run in each environment per policy rollout"""
-    num_eval_steps: int =75
+    num_eval_steps: int =80
     """the number of steps to run in each evaluation environment during evaluation"""
     reconfiguration_freq: Optional[int] = None
     """how often to reconfigure the environment during training"""
@@ -503,10 +502,6 @@ if __name__ == "__main__":
     plot_return = []
     plot_success_once = []
     
-    # Buffers for tracking per-step rewards
-    train_episode_buffer = []  # stores (raw_rewards, cumulative_rewards) for last 100 episodes
-    eval_episode_rewards = []  # temporary buffer for current eval batch
-    
     args = tyro.cli(Args)
     args.grad_steps_per_iteration = int(args.training_freq * args.utd)
     args.steps_per_env = args.training_freq // args.num_envs
@@ -677,9 +672,6 @@ if __name__ == "__main__":
     global_steps_per_iteration = args.num_envs * (args.steps_per_env)
     pbar = tqdm.tqdm(range(args.total_timesteps))
     cumulative_times = defaultdict(float)
-    
-    # Track per-step rewards during training
-    current_train_step_rewards = [[] for _ in range(args.num_envs)]  # per-env step rewards
 
     while global_step < args.total_timesteps:
         if args.eval_freq > 0 and (global_step - args.training_freq) // args.eval_freq < global_step // args.eval_freq:
@@ -690,31 +682,41 @@ if __name__ == "__main__":
             eval_metrics = defaultdict(list)
             num_episodes = 0
             
-            # Track per-step rewards for eval
-            eval_episode_rewards = []  # will store per-step rewards for each completed episode
-            current_eval_step_rewards = [[] for _ in range(args.num_eval_envs)]  # per-env step rewards
-            
-            for _ in range(args.num_eval_steps):
-                with torch.no_grad():
-                    eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = eval_envs.step(actor.get_eval_action(eval_obs))
-                    
-                    # Track rewards for each environment
-                    for env_idx in range(args.num_eval_envs):
-                        current_eval_step_rewards[env_idx].append(eval_rew[env_idx].item())
-                    
-                    if "final_info" in eval_infos:
-                        mask = eval_infos["_final_info"]
-                        num_episodes += mask.sum()
-                        
-                        # Save completed episodes' step rewards
+            if args.wandb_reward_trajectories:
+                # Initialize reward tracking for each environment (like provided code)
+                reward_trajectories = [[] for _ in range(args.num_eval_envs)]
+                episode_steps = [0] * args.num_eval_envs
+                active_envs = [True] * args.num_eval_envs
+                
+                for step in range(args.num_eval_steps):
+                    with torch.no_grad():
+                        eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = eval_envs.step(actor.get_eval_action(eval_obs))
+                        if "final_info" in eval_infos:
+                            mask = eval_infos["_final_info"]
+                            num_episodes += mask.sum()
+                            for k, v in eval_infos["final_info"]["episode"].items():
+                                eval_metrics[k].append(v)
+
+                        # Track rewards for each environment
                         for env_idx in range(args.num_eval_envs):
-                            if mask[env_idx]:
-                                if len(current_eval_step_rewards[env_idx]) > 0:
-                                    eval_episode_rewards.append(current_eval_step_rewards[env_idx])
-                                current_eval_step_rewards[env_idx] = []
+                            if active_envs[env_idx]:
+                                reward_trajectories[env_idx].append(eval_rew[env_idx].item())
+                                episode_steps[env_idx] += 1
+                                
+                                # Check if episode ended
+                                if eval_terminations[env_idx] or eval_truncations[env_idx]:
+                                    active_envs[env_idx] = False
+            else:
+                for _ in range(args.num_eval_steps):
+                    with torch.no_grad():
+                        eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = eval_envs.step(actor.get_eval_action(eval_obs))
                         
-                        for k, v in eval_infos["final_info"]["episode"].items():
-                            eval_metrics[k].append(v)
+                        if "final_info" in eval_infos:
+                            mask = eval_infos["_final_info"]
+                            num_episodes += mask.sum()
+                            
+                            for k, v in eval_infos["final_info"]["episode"].items():
+                                eval_metrics[k].append(v)
             eval_metrics_mean = {}
             for k, v in eval_metrics.items():
                 mean = torch.stack(v).float().mean()
@@ -722,43 +724,31 @@ if __name__ == "__main__":
                 if logger is not None:
                     logger.add_scalar(f"eval/{k}", mean, global_step)
             
-            # Log per-step rewards for eval
-            if len(eval_episode_rewards) > 0 and logger is not None and logger.log_wandb:
-                # Pad episodes to same length (75 steps) and compute average
-                max_steps = max(len(ep) for ep in eval_episode_rewards)
-                padded_episodes = []
-                for ep_rewards in eval_episode_rewards:
-                    if len(ep_rewards) < max_steps:
-                        # Pad with zeros (or last value)
-                        ep_rewards = ep_rewards + [0] * (max_steps - len(ep_rewards))
-                    padded_episodes.append(ep_rewards[:max_steps])
+            # Log reward trajectories using line_series (no images, saves storage)
+            if args.wandb_reward_trajectories and logger is not None and logger.log_wandb:
+                # Group data by environment
+                xs_by_env = []
+                ys_by_env = []
+                keys = []
                 
-                # Compute average raw and cumulative rewards per step
-                avg_raw_rewards = np.mean(padded_episodes, axis=0)
-                avg_cumulative_rewards = np.cumsum(avg_raw_rewards)
+                # Find top 4 trajectories with highest mean reward
+                reward_trajectories_sorted = sorted(reward_trajectories, key=lambda x: np.mean(x) if len(x) > 0 else -float('inf'), reverse=True)
+                reward_trajectories_sorted = reward_trajectories_sorted[:4]
+                for env_idx, rewards in enumerate(reward_trajectories_sorted):
+                    if len(rewards) > 0:  # Only include environments with data
+                        xs_by_env.append(list(range(len(rewards))))  # Steps for this env
+                        ys_by_env.append(rewards)  # Rewards for this env
+                        keys.append(f"env_{env_idx}")  # Label for this env
                 
-                # Create figures and log as images (creates slider effect like videos)
-                fig_raw, ax_raw = plt.subplots(figsize=(10, 6))
-                ax_raw.plot(range(len(avg_raw_rewards)), avg_raw_rewards, linewidth=2, color='blue')
-                ax_raw.set_xlabel('Episode Step', fontsize=12)
-                ax_raw.set_ylabel('Raw Reward', fontsize=12)
-                ax_raw.set_title(f'Eval Raw Reward per Step', fontsize=14)
-                ax_raw.grid(True, alpha=0.3)
-                
-                fig_cumulative, ax_cumulative = plt.subplots(figsize=(10, 6))
-                ax_cumulative.plot(range(len(avg_cumulative_rewards)), avg_cumulative_rewards, linewidth=2, color='orange')
-                ax_cumulative.set_xlabel('Episode Step', fontsize=12)
-                ax_cumulative.set_ylabel('Cumulative Reward', fontsize=12)
-                ax_cumulative.set_title(f'Eval Cumulative Reward per Step', fontsize=14)
-                ax_cumulative.grid(True, alpha=0.3)
-                
-                wandb.log({
-                    "eval/raw_reward_per_step": wandb.Image(fig_raw),
-                    "eval/cumulative_reward_per_step": wandb.Image(fig_cumulative)
-                }, step=global_step)
-                
-                plt.close(fig_raw)
-                plt.close(fig_cumulative)
+                if keys:  # Only log if we have data
+                    # Use line_series with properly structured data
+                    wandb.log({"eval/reward_trajectories": wandb.plot.line_series(
+                        xs=xs_by_env,  # List of lists of x values
+                        ys=ys_by_env,  # List of lists of y values
+                        keys=keys,     # List of labels
+                        title="Reward Trajectories",
+                        xname="Step")}, 
+                        step=global_step)
             
             # Note: is_grasped (from is_grasping check) is automatically logged above if present in episode info
             pbar_description = (
@@ -811,10 +801,6 @@ if __name__ == "__main__":
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, rewards, terminations, truncations, infos = envs.step(actions)
             
-            # Track rewards for training episodes
-            for env_idx in range(args.num_envs):
-                current_train_step_rewards[env_idx].append(rewards[env_idx].item())
-            
             real_next_obs = {k:v.clone() for k, v in next_obs.items()}
             if args.bootstrap_at_done == 'never':
                 need_final_obs = torch.ones_like(terminations, dtype=torch.bool)
@@ -832,60 +818,8 @@ if __name__ == "__main__":
                 for k in real_next_obs.keys():
                     real_next_obs[k][need_final_obs] = infos["final_observation"][k][need_final_obs].clone()
                 
-                # Save completed episodes' step rewards to buffer
-                for env_idx in range(args.num_envs):
-                    if done_mask[env_idx]:
-                        if len(current_train_step_rewards[env_idx]) > 0:
-                            train_episode_buffer.append(current_train_step_rewards[env_idx])
-                            current_train_step_rewards[env_idx] = []
-                            
-                            # Log when we have 100 episodes
-                            if len(train_episode_buffer) >= 100 and logger is not None and logger.log_wandb:
-                                # Use last 100 episodes
-                                recent_episodes = train_episode_buffer[-100:]
-                                
-                                # Pad episodes to same length and compute average
-                                max_steps = max(len(ep) for ep in recent_episodes)
-                                padded_episodes = []
-                                for ep_rewards in recent_episodes:
-                                    if len(ep_rewards) < max_steps:
-                                        ep_rewards = ep_rewards + [0] * (max_steps - len(ep_rewards))
-                                    padded_episodes.append(ep_rewards[:max_steps])
-                                
-                                # Compute average raw and cumulative rewards per step
-                                avg_raw_rewards = np.mean(padded_episodes, axis=0)
-                                avg_cumulative_rewards = np.cumsum(avg_raw_rewards)
-                                
-                                # Create figures and log as images (creates slider effect like videos)
-                                fig_raw, ax_raw = plt.subplots(figsize=(10, 6))
-                                ax_raw.plot(range(len(avg_raw_rewards)), avg_raw_rewards, linewidth=2, color='blue')
-                                ax_raw.set_xlabel('Episode Step', fontsize=12)
-                                ax_raw.set_ylabel('Raw Reward', fontsize=12)
-                                ax_raw.set_title(f'Train Raw Reward per Step', fontsize=14)
-                                ax_raw.grid(True, alpha=0.3)
-                                
-                                fig_cumulative, ax_cumulative = plt.subplots(figsize=(10, 6))
-                                ax_cumulative.plot(range(len(avg_cumulative_rewards)), avg_cumulative_rewards, linewidth=2, color='orange')
-                                ax_cumulative.set_xlabel('Episode Step', fontsize=12)
-                                ax_cumulative.set_ylabel('Cumulative Reward', fontsize=12)
-                                ax_cumulative.set_title(f'Train Cumulative Reward per Step', fontsize=14)
-                                ax_cumulative.grid(True, alpha=0.3)
-                                
-                                wandb.log({
-                                    "train/raw_reward_per_step": wandb.Image(fig_raw),
-                                    "train/cumulative_reward_per_step": wandb.Image(fig_cumulative)
-                                }, step=global_step)
-                                
-                                plt.close(fig_raw)
-                                plt.close(fig_cumulative)
-                                
-                                # Keep buffer at reasonable size (store last 200 episodes)
-                                if len(train_episode_buffer) > 200:
-                                    train_episode_buffer = train_episode_buffer[-200:]
-                
                 for k, v in final_info["episode"].items():
                     logger.add_scalar(f"train/{k}", v[done_mask].float().mean(), global_step)
-                # Note: is_grasped (from is_grasping check) is automatically logged above if present in episode info
 
             rb.add(obs, real_next_obs, actions, rewards, stop_bootstrap)
 
